@@ -67,7 +67,7 @@ class PreferencesVideo : BasePreferenceFragment(), SharedPreferences.OnSharedPre
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if (sharedPreferences == null || key == null) return
         when (key) {
-            KEY_PREFERRED_RESOLUTION -> {
+            KEY_PREFERRED_RESOLUTION, "vlc4mvc_output_mode", "vlc4mvc_swap_eyes" -> {
                 lifecycleScope.launch {
                     VLCInstance.restart()
                     restartMediaPlayer()

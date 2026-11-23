@@ -1443,6 +1443,18 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     override fun next() {
+        val mp = service?.mediaplayer
+        val titleIdx = mp?.title ?: -1
+        val chapters = if (titleIdx >= 0) mp?.getChapters(titleIdx) else mp?.getChapters(-1)
+        val curChapter = mp?.chapter ?: -1
+        if (chapters != null && chapters.isNotEmpty() && curChapter < chapters.size - 1) {
+            mp?.nextChapter()
+            val nextChapIdx = curChapter + 1
+            val name = if (nextChapIdx < chapters.size) chapters[nextChapIdx].name ?: "Chapter ${nextChapIdx + 1}" else "Chapter ${nextChapIdx + 1}"
+            overlayDelegate.showInfo(name, 1500)
+            overlayDelegate.showOverlay()
+            return
+        }
         if (service?.hasNext() == true) {
             service?.next()
             overlayDelegate.showInfo(getString(R.string.next), 1000)
@@ -1451,6 +1463,18 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     override fun previous() {
+        val mp = service?.mediaplayer
+        val titleIdx = mp?.title ?: -1
+        val chapters = if (titleIdx >= 0) mp?.getChapters(titleIdx) else mp?.getChapters(-1)
+        val curChapter = mp?.chapter ?: -1
+        if (chapters != null && chapters.isNotEmpty() && curChapter > 0) {
+            mp?.previousChapter()
+            val prevChapIdx = curChapter - 1
+            val name = if (prevChapIdx >= 0 && prevChapIdx < chapters.size) chapters[prevChapIdx].name ?: "Chapter ${prevChapIdx + 1}" else "Chapter ${prevChapIdx + 1}"
+            overlayDelegate.showInfo(name, 1500)
+            overlayDelegate.showOverlay()
+            return
+        }
         service?.let { service ->
             service.previous(false)
             overlayDelegate.showInfo(getString(R.string.previous), 1000)

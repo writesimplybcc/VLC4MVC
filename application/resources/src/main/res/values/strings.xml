@@ -5,7 +5,7 @@
     <!-- Main VLC Interface -->
     <string name="ok">OK</string>
     <string name="cancel">Cancel</string>
-    <string name="app_name" translatable="false">VLC</string>
+    <string name="app_name" translatable="false">VLC4MVC</string>
     <string name="other">Other</string>
     <string name="sortby">Sort by…</string>
     <string name="sortby_name">Name</string>
@@ -323,7 +323,7 @@
     <string name="hold_to_stop">Hold to stop</string>
 
     <!-- About -->
-    <string name="app_name_full">VLC for Android</string>
+    <string name="app_name_full">VLC4MVC for Android</string>
     <string name="revision">Revision</string>
     <string name="about">About</string>
     <string name="about_vlc_text">VLC for Android™ is a port of VLC media player, the popular open source media player. The Android™ version can read all files and network streams.</string>
@@ -1447,4 +1447,9 @@
     <string name="feedback_email_warning_try_anyway">Try anyway</string>
     <string name="forum_url" translatable="false">https://forum.videolan.org/viewforum.php?f=35</string>
     <string name="doc_url" translatable="false">https://docs.videolan.me/vlc-user/android/</string>
+    <!-- VLC4MVC 3D Settings -->
+    <string name="vlc4mvc_prefs_category">3D Stereoscopic (VLC4MVC)</string>
+    <string name="vlc4mvc_output_mode_title">3D Output Format</string>
+    <string name="vlc4mvc_swap_eyes_title">Invert 3D Eyes (Left/Right)</string>
+    <string name="vlc4mvc_swap_eyes_summary">Swap Left and Right eye views for inverted sync</string>
 </resources>

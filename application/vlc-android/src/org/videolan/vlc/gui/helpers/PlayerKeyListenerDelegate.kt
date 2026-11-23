@@ -51,7 +51,7 @@ class PlayerKeyListenerDelegate(private val keycodeListener: KeycodeListener) {
                 keycodeListener.togglePlayPause()
                 true
             }
-            KeyEvent.KEYCODE_N, KeyEvent.KEYCODE_BUTTON_R2, KeyEvent.KEYCODE_CHANNEL_UP -> {
+            KeyEvent.KEYCODE_N, KeyEvent.KEYCODE_BUTTON_R2, KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_PAGE_DOWN -> {
                 keycodeListener.next()
                 true
             }
@@ -111,7 +111,7 @@ class PlayerKeyListenerDelegate(private val keycodeListener: KeycodeListener) {
                 keycodeListener.stop()
                 true
             }
-            KeyEvent.KEYCODE_P, KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_CHANNEL_DOWN -> {
+            KeyEvent.KEYCODE_P, KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_PAGE_UP -> {
                 keycodeListener.previous()
                 true
             }

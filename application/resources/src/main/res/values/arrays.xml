@@ -728,4 +728,57 @@
         <item>@string/report_a_crash</item>
     </string-array>
 
+    <string-array name="vlc4mvc_output_modes">
+        <item>Full-SBS (3840x1080 - Custom 3D resolution)</item>
+        <item>Full-TAB (1920x2160 - Custom 3D resolution)</item>
+        <item>Half-SBS (3840x2160 - 4K 3D TV / Projector)</item>
+        <item>Half-TAB (3840x2160 - 4K 3D TV / Projector)</item>
+        <item>Half-SBS (1920x1080 - Standard 3D TV / Projector)</item>
+        <item>Half-TAB (1920x1080 - Standard 3D TV / Projector)</item>
+        <item>2D Base View Only</item>
+    </string-array>
+
+    <string-array name="vlc4mvc_output_mode_values" translatable="false">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+    </string-array>
+
+    <string-array name="vlc4mvc_sub_scale_entries">
+        <item>60% (Ultra-Compact)</item>
+        <item>75% (Small - Cinema Scope)</item>
+        <item>85% (Compact)</item>
+        <item>100% (Normal - Default Blu-ray)</item>
+        <item>115% (Large)</item>
+        <item>130% (Extra Large)</item>
+    </string-array>
+
+    <string-array name="vlc4mvc_sub_scale_values" translatable="false">
+        <item>60</item>
+        <item>75</item>
+        <item>85</item>
+        <item>100</item>
+        <item>115</item>
+        <item>130</item>
+    </string-array>
+
+    <string-array name="vlc4mvc_theme_color_entries">
+        <item>Matrix Green (VLC4MVC Default)</item>
+        <item>Classic Orange (VLC Stock)</item>
+        <item>Cyber Blue</item>
+        <item>Cinema Red</item>
+        <item>Neon Purple</item>
+    </string-array>
+
+    <string-array name="vlc4mvc_theme_color_values" translatable="false">
+        <item>green</item>
+        <item>orange</item>
+        <item>blue</item>
+        <item>red</item>
+        <item>purple</item>
+    </string-array>
 </resources>

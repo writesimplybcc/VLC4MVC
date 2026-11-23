@@ -144,13 +144,21 @@ class MainTvFragment : BrowseSupportFragment(), OnItemViewSelectedListener, OnIt
         title = getString(R.string.app_name)
         badgeDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.icon)
 
+        val themePref = org.videolan.tools.Settings.getInstance(requireContext()).getString("vlc4mvc_theme_color", "green")
+        val (accentColor, brandCol) = when (themePref) {
+            "orange" -> android.graphics.Color.parseColor("#FF8800") to android.graphics.Color.parseColor("#E65100")
+            "blue" -> android.graphics.Color.parseColor("#2196F3") to android.graphics.Color.parseColor("#1565C0")
+            "red" -> android.graphics.Color.parseColor("#E53935") to android.graphics.Color.parseColor("#C62828")
+            "purple" -> android.graphics.Color.parseColor("#9C27B0") to android.graphics.Color.parseColor("#6A1B9A")
+            else -> android.graphics.Color.parseColor("#4CAF50") to android.graphics.Color.parseColor("#1B5E20")
+        }
         //Enable search feature only if we detect Google Play Services.
         if (AndroidDevices.hasPlayServices) {
             setOnSearchClickedListener(this)
             // set search icon color
-            searchAffordanceColor = ContextCompat.getColor(requireContext(), R.color.orange600)
+            searchAffordanceColor = accentColor
         }
-        brandColor = ContextCompat.getColor(requireContext(), R.color.orange900)
+        brandColor = brandCol
         backgroundManager = BackgroundManager.getInstance(requireActivity()).apply { attach(requireActivity().window) }
         model = getMainTvModel()
         PlaybackService.serviceFlow.onEach { onServiceChanged(it) }

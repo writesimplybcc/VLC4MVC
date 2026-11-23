@@ -112,7 +112,7 @@ class PreferencesAudio : BasePreferenceFragment(), SharedPreferences.OnSharedPre
     }
 
     private fun updatePassThroughSummary() {
-        val pt = preferenceManager.sharedPreferences!!.getBoolean(KEY_AUDIO_DIGITAL_OUTPUT, false)
+        val pt = preferenceManager.sharedPreferences!!.getBoolean(KEY_AUDIO_DIGITAL_OUTPUT, true)
         findPreference<Preference>(KEY_AUDIO_DIGITAL_OUTPUT)?.setSummary(if (pt) R.string.audio_digital_output_enabled else R.string.audio_digital_output_disabled)
     }
 

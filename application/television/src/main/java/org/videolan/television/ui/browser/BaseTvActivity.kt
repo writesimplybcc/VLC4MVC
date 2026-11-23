@@ -72,6 +72,15 @@ abstract class BaseTvActivity : FragmentActivity(), IDialogManager {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val themePref = org.videolan.tools.Settings.getInstance(this).getString("vlc4mvc_theme_color", "green")
+        val themeRes = when (themePref) {
+            "orange" -> org.videolan.television.R.style.Theme_VLC_TV_Orange
+            "blue" -> org.videolan.television.R.style.Theme_VLC_TV_Blue
+            "red" -> org.videolan.television.R.style.Theme_VLC_TV_Red
+            "purple" -> org.videolan.television.R.style.Theme_VLC_TV_Purple
+            else -> org.videolan.television.R.style.Theme_VLC_TV_Green
+        }
+        setTheme(themeRes)
         //Init Medialibrary if KO
         if (savedInstanceState != null) startMedialibrary(firstRun = false, upgrade = false, parse = true)
         super.onCreate(savedInstanceState)

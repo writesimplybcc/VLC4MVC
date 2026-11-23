@@ -135,4 +135,20 @@
 
 
 
+    <PreferenceCategory android:title="3D &amp; Blu-ray Subtitles (VLC4MVC)">
+        <ListPreference
+                android:defaultValue="100"
+                android:entries="@array/vlc4mvc_sub_scale_entries"
+                android:entryValues="@array/vlc4mvc_sub_scale_values"
+                android:key="vlc4mvc_sub_scale"
+                android:summary="%s"
+                android:persistent="true"
+                android:title="Blu-ray (SUP) Subtitle Size" />
+        <CheckBoxPreference
+                android:defaultValue="false"
+                android:key="vlc4mvc_cih_clamp"
+                android:title="Keep Subtitles Inside 2.39:1 (CIH)"
+                android:summary="Pushes subtitles up from black bars into the active picture for scope screens" />
+    </PreferenceCategory>
+
 </androidx.preference.PreferenceScreen>

@@ -240,6 +240,14 @@ object VLCOptions {
                 options.add("--soundfont=${soundFontFile.path}")
             }
             options.add("--preferred-resolution=${pref.getString(KEY_PREFERRED_RESOLUTION, "-1")!!}")
+            val vlc4mvcOutput = pref.getString("vlc4mvc_output_mode", "0") ?: "0"
+            options.add("--vlc4mvc-output=$vlc4mvcOutput")
+            if (pref.getBoolean("vlc4mvc_swap_eyes", false)) options.add("--vlc4mvc-swap-eyes")
+            else options.add("--no-vlc4mvc-swap-eyes")
+            val subScale = pref.getString("vlc4mvc_sub_scale", "100") ?: "100"
+            options.add("--vlc4mvc-sub-scale=$subScale")
+            if (pref.getBoolean("vlc4mvc_cih_clamp", false)) options.add("--vlc4mvc-screen-ar=1")
+            else options.add("--vlc4mvc-screen-ar=0")
             if (BuildConfig.DEBUG) Log.d(this::class.java.simpleName, "VLC Options: ${options.joinToString(" ")}")
             return options
         }
@@ -321,6 +329,14 @@ object VLCOptions {
             media.addOption(":sout-chromecast-audio-passthrough=" + prefs.getBoolean(KEY_CASTING_PASSTHROUGH, true))
             media.addOption(":sout-chromecast-conversion-quality=" + prefs.getString(KEY_CASTING_QUALITY, "2")!!)
         }
+        val vlc4mvcOutput = prefs.getString("vlc4mvc_output_mode", "0") ?: "0"
+        media.addOption(":vlc4mvc-output=$vlc4mvcOutput")
+        if (prefs.getBoolean("vlc4mvc_swap_eyes", false)) media.addOption(":vlc4mvc-swap-eyes")
+        else media.addOption(":no-vlc4mvc-swap-eyes")
+        val subScale = prefs.getString("vlc4mvc_sub_scale", "100") ?: "100"
+        media.addOption(":vlc4mvc-sub-scale=$subScale")
+        if (prefs.getBoolean("vlc4mvc_cih_clamp", false)) media.addOption(":vlc4mvc-screen-ar=1")
+        else media.addOption(":vlc4mvc-screen-ar=0")
     }
 
     fun getEqualizerEnabledState(context: Context): Boolean {

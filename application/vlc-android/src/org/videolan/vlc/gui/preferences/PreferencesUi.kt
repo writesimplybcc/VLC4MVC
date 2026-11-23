@@ -163,7 +163,7 @@ class PreferencesUi : BasePreferenceFragment(), SharedPreferences.OnSharedPrefer
                 (activity as PreferencesActivity).setRestart()
                 UiTools.restartDialog(requireActivity())
             }
-            KEY_APP_THEME -> {
+            KEY_APP_THEME, "vlc4mvc_theme_color" -> {
                 UiTools.restartDialog(requireActivity())
             }
             LIST_TITLE_ELLIPSIZE -> {

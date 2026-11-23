@@ -42,6 +42,25 @@
 
 
     <PreferenceCategory
+            android:title="@string/vlc4mvc_prefs_category"
+            android:key="vlc4mvc_category">
+        <ListPreference
+                android:defaultValue="0"
+                android:entries="@array/vlc4mvc_output_modes"
+                android:entryValues="@array/vlc4mvc_output_mode_values"
+                android:key="vlc4mvc_output_mode"
+                android:summary="%s"
+                android:title="@string/vlc4mvc_output_mode_title"/>
+
+        <CheckBoxPreference
+                app:singleLineTitle="false"
+                android:defaultValue="false"
+                android:key="vlc4mvc_swap_eyes"
+                android:summary="@string/vlc4mvc_swap_eyes_summary"
+                android:title="@string/vlc4mvc_swap_eyes_title"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
             android:title="@string/interface_secondary_display_category_title"
             android:key="secondary_display_category">
         <Preference

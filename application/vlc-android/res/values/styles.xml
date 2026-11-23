@@ -380,6 +380,73 @@
     </style>
     
     
+    <!-- VLC4MVC TV Theme Variants -->
+    <style name="Theme.VLC.TV.Green" parent="Theme.VLC.TV">
+        <item name="colorPrimary">#2e7d32</item>
+        <item name="colorAccent">#4CAF50</item>
+        <item name="audio_browser_separator">#4CAF50</item>
+        <item name="primary_focus">#334caf50</item>
+    </style>
+
+    <style name="Theme.VLC.TV.Orange" parent="Theme.VLC.TV">
+        <item name="colorPrimary">#d84315</item>
+        <item name="colorAccent">#ff8800</item>
+        <item name="audio_browser_separator">#ff8800</item>
+        <item name="primary_focus">#33ff8800</item>
+    </style>
+
+    <style name="Theme.VLC.TV.Blue" parent="Theme.VLC.TV">
+        <item name="colorPrimary">#1565C0</item>
+        <item name="colorAccent">#2196F3</item>
+        <item name="audio_browser_separator">#2196F3</item>
+        <item name="primary_focus">#332196f3</item>
+    </style>
+
+    <style name="Theme.VLC.TV.Red" parent="Theme.VLC.TV">
+        <item name="colorPrimary">#C62828</item>
+        <item name="colorAccent">#E53935</item>
+        <item name="audio_browser_separator">#E53935</item>
+        <item name="primary_focus">#33e53935</item>
+    </style>
+
+    <style name="Theme.VLC.TV.Purple" parent="Theme.VLC.TV">
+        <item name="colorPrimary">#6A1B9A</item>
+        <item name="colorAccent">#9C27B0</item>
+        <item name="audio_browser_separator">#9C27B0</item>
+        <item name="primary_focus">#339c27b0</item>
+    </style>
+
+    <!-- VLC4MVC Black Themes (Preferences & Mobile) -->
+    <style name="Theme.VLC.Black.Green" parent="Theme.VLC.Black">
+        <item name="colorPrimary">#4CAF50</item>
+        <item name="colorAccent">#43a047</item>
+        <item name="colorControlHighlight">#4CAF50</item>
+    </style>
+
+    <style name="Theme.VLC.Black.Orange" parent="Theme.VLC.Black">
+        <item name="colorPrimary">#ff8800</item>
+        <item name="colorAccent">#f57c00</item>
+        <item name="colorControlHighlight">#ff8800</item>
+    </style>
+
+    <style name="Theme.VLC.Black.Blue" parent="Theme.VLC.Black">
+        <item name="colorPrimary">#2196F3</item>
+        <item name="colorAccent">#1976D2</item>
+        <item name="colorControlHighlight">#2196F3</item>
+    </style>
+
+    <style name="Theme.VLC.Black.Red" parent="Theme.VLC.Black">
+        <item name="colorPrimary">#E53935</item>
+        <item name="colorAccent">#D32F2F</item>
+        <item name="colorControlHighlight">#E53935</item>
+    </style>
+
+    <style name="Theme.VLC.Black.Purple" parent="Theme.VLC.Black">
+        <item name="colorPrimary">#9C27B0</item>
+        <item name="colorAccent">#7B1FA2</item>
+        <item name="colorControlHighlight">#9C27B0</item>
+    </style>
+
     <style name="Theme.VLC.TV.Onboarding" parent="Theme.Leanback.Onboarding">
         <item name="onboardingPageIndicatorStyle">@style/VLC.OnboardingPageIndicatorStyle</item>
     </style>

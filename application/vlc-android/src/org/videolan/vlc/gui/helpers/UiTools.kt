@@ -1101,7 +1101,15 @@ fun BaseActivity.applyTheme() {
     }
     if (Settings.showTvUi) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-        setTheme(R.style.Theme_VLC_Black)
+        val themePref = settings.getString("vlc4mvc_theme_color", "green")
+        val themeRes = when (themePref) {
+            "orange" -> R.style.Theme_VLC_Black_Orange
+            "blue" -> R.style.Theme_VLC_Black_Blue
+            "red" -> R.style.Theme_VLC_Black_Red
+            "purple" -> R.style.Theme_VLC_Black_Purple
+            else -> R.style.Theme_VLC_Black_Green
+        }
+        setTheme(themeRes)
         return
     }
 
