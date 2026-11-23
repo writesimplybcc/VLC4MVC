@@ -416,6 +416,13 @@
         <item name="primary_focus">#339c27b0</item>
     </style>
 
+    <style name="Theme.VLC.TV.Silver" parent="Theme.VLC.TV">
+        <item name="colorPrimary">#37474F</item>
+        <item name="colorAccent">#CFD8DC</item>
+        <item name="audio_browser_separator">#B0BEC5</item>
+        <item name="primary_focus">#33cfd8dc</item>
+    </style>
+
     <!-- VLC4MVC Black Themes (Preferences & Mobile) -->
     <style name="Theme.VLC.Black.Green" parent="Theme.VLC.Black">
         <item name="colorPrimary">#4CAF50</item>
@@ -445,6 +452,12 @@
         <item name="colorPrimary">#9C27B0</item>
         <item name="colorAccent">#7B1FA2</item>
         <item name="colorControlHighlight">#9C27B0</item>
+    </style>
+
+    <style name="Theme.VLC.Black.Silver" parent="Theme.VLC.Black">
+        <item name="colorPrimary">#37474F</item>
+        <item name="colorAccent">#CFD8DC</item>
+        <item name="colorControlHighlight">#CFD8DC</item>
     </style>
 
     <style name="Theme.VLC.TV.Onboarding" parent="Theme.Leanback.Onboarding">

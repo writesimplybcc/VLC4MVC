@@ -1107,6 +1107,7 @@ fun BaseActivity.applyTheme() {
             "blue" -> R.style.Theme_VLC_Black_Blue
             "red" -> R.style.Theme_VLC_Black_Red
             "purple" -> R.style.Theme_VLC_Black_Purple
+            "silver" -> R.style.Theme_VLC_Black_Silver
             else -> R.style.Theme_VLC_Black_Green
         }
         setTheme(themeRes)

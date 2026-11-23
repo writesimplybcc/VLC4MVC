@@ -78,6 +78,7 @@ abstract class BaseTvActivity : FragmentActivity(), IDialogManager {
             "blue" -> org.videolan.television.R.style.Theme_VLC_TV_Blue
             "red" -> org.videolan.television.R.style.Theme_VLC_TV_Red
             "purple" -> org.videolan.television.R.style.Theme_VLC_TV_Purple
+            "silver" -> org.videolan.television.R.style.Theme_VLC_TV_Silver
             else -> org.videolan.television.R.style.Theme_VLC_TV_Green
         }
         setTheme(themeRes)

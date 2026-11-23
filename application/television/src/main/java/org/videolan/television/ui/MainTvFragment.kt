@@ -150,6 +150,7 @@ class MainTvFragment : BrowseSupportFragment(), OnItemViewSelectedListener, OnIt
             "blue" -> android.graphics.Color.parseColor("#2196F3") to android.graphics.Color.parseColor("#1565C0")
             "red" -> android.graphics.Color.parseColor("#E53935") to android.graphics.Color.parseColor("#C62828")
             "purple" -> android.graphics.Color.parseColor("#9C27B0") to android.graphics.Color.parseColor("#6A1B9A")
+            "silver" -> android.graphics.Color.parseColor("#CFD8DC") to android.graphics.Color.parseColor("#37474F")
             else -> android.graphics.Color.parseColor("#4CAF50") to android.graphics.Color.parseColor("#1B5E20")
         }
         //Enable search feature only if we detect Google Play Services.

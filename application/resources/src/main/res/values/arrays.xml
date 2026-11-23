@@ -772,6 +772,7 @@
         <item>Cyber Blue</item>
         <item>Cinema Red</item>
         <item>Neon Purple</item>
+        <item>Monochrome Silver</item>
     </string-array>
 
     <string-array name="vlc4mvc_theme_color_values" translatable="false">
@@ -780,5 +781,6 @@
         <item>blue</item>
         <item>red</item>
         <item>purple</item>
+        <item>silver</item>
     </string-array>
 </resources>
