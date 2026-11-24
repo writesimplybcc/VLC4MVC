@@ -179,10 +179,11 @@ Personalize your Android TV interface under `Settings` &rarr; `Interface` &rarr;
 No computer, USB thumb drive, or file manager needed!
 
 1. On your Nvidia Shield, open the **Google Play Store**, search for **Downloader** (by AFTVnews with an orange icon), and install it.
-2. Launch **Downloader**, navigate to the URL bar, and enter the **5-digit short code**:
+2. Launch **Downloader**, navigate to the URL bar, and enter the **short code**:
    ```
-   [ENTER YOUR 5-DIGIT CODE HERE]
+   9716572
    ```
+   *(or enter `aftv.news/9716572` in any browser or Downloader)*
 3. Click **Go**. Downloader will fetch `VLC4MVC.apk` directly.
 4. When prompted, click **Install**. (If prompted to allow Unknown Sources for Downloader, enable it in Android Settings and click Install).
 
