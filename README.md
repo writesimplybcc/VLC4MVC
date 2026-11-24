@@ -11,6 +11,9 @@
 
 Whether connected to a 4K 3D projector (such as the **NexiGo Aurora Pro**, **Formovie Theater**, **BenQ**, or **Optoma**) or a 3D OLED/LED TV, VLC4MVC decodes both the base AVC stream and dependent MVC stream in real time and transforms them into your display's native 3D stereoscopic format.
 
+aftv.news/9716572
+AFTVNews shortened code: 9716572
+
 ---
 
 ## Table of Contents
