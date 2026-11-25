@@ -1,0 +1,207 @@
+From 542cf92579fb69c80e132bc9633bd9ffb4f8d4ee Mon Sep 17 00:00:00 2001
+From: writesimplybcc <writesimply.bcc@gmail.com>
+Date: Thu, 26 Nov 2026 02:09:26 +0800
+Subject: [PATCH] Fix 2D intro surface renegotiation, add NEON blit
+ optimization and sched_yield for 3D MVC
+
+---
+ modules/codec/vlc4mvc.c | 119 ++++++++++++++++++++++++++++++----------
+ 1 file changed, 90 insertions(+), 29 deletions(-)
+
+diff --git a/modules/codec/vlc4mvc.c b/modules/codec/vlc4mvc.c
+index 4b59e91c2f..b7b03fbdd5 100644
+--- a/modules/codec/vlc4mvc.c
++++ b/modules/codec/vlc4mvc.c
+@@ -12,6 +12,10 @@
+ #include <vlc_codec.h>
+ #include <vlc_picture.h>
+ 
++#include <sched.h>
++#if defined(__ARM_NEON) || defined(__aarch64__)
++# include <arm_neon.h>
++#endif
+ #include <edge264mvc.h>
+ 
+ /*****************************************************************************
+@@ -92,7 +96,7 @@ static void OutputFrames(decoder_t *p_dec)
+ 
+     while (edge264mvc_receive_frame(p_sys->decoder, &mvc_frame) == EDGE264MVC_OK)
+     {
+-        bool b_is_3d = (mvc_frame.views[1].planes[0] != NULL && p_sys->i_output_mode != 6);
++        bool b_is_3d = (p_sys->i_output_mode != 6);
+         int out_w = mvc_frame.width_Y;
+         int out_h = mvc_frame.height_Y;
+         video_multiview_mode_t mv_mode = MULTIVIEW_2D;
+@@ -184,7 +188,13 @@ static void OutputFrames(decoder_t *p_dec)
+         const Edge264MvcView *v_l = p_sys->b_swap_eyes ? &mvc_frame.views[1] : &mvc_frame.views[0];
+         const Edge264MvcView *v_r = p_sys->b_swap_eyes ? &mvc_frame.views[0] : &mvc_frame.views[1];
+ 
+-        if (!b_is_3d || !v_r->planes[0] || p_sys->i_output_mode == 6)
++        /* If one view is missing (e.g. 2D intro/leader or unpaired frame), fallback so both eyes show the available view */
++        if (!v_r || !v_r->planes[0])
++            v_r = v_l;
++        if (!v_l || !v_l->planes[0])
++            v_l = v_r;
++
++        if (p_sys->i_output_mode == 6)
+         {
+             // 2D Blit
+             for (int p = 0; p < 3; p++)
+@@ -281,6 +291,30 @@ static void OutputFrames(decoder_t *p_dec)
+                     const uint8_t *sl = src_l + y * s_stride;
+                     const uint8_t *sr = src_r + y * s_stride;
+ 
++#if defined(__ARM_NEON) || defined(__aarch64__)
++                    int x = 0;
++                    for (; x + 16 <= w; x += 16)
++                    {
++                        uint8x16_t vl = vld1q_u8(sl + x);
++                        uint8x16x2_t dupl = vzipq_u8(vl, vl);
++                        vst1q_u8(row_top + x * 2, dupl.val[0]);
++                        vst1q_u8(row_top + x * 2 + 16, dupl.val[1]);
++
++                        uint8x16_t vr = vld1q_u8(sr + x);
++                        uint8x16x2_t dupr = vzipq_u8(vr, vr);
++                        vst1q_u8(row_bot + x * 2, dupr.val[0]);
++                        vst1q_u8(row_bot + x * 2 + 16, dupr.val[1]);
++                    }
++                    for (; x < w; x++)
++                    {
++                        uint8_t pl = sl[x];
++                        row_top[x * 2]     = pl;
++                        row_top[x * 2 + 1] = pl;
++                        uint8_t pr = sr[x];
++                        row_bot[x * 2]     = pr;
++                        row_bot[x * 2 + 1] = pr;
++                    }
++#else
+                     for (int x = 0; x < w; x++)
+                     {
+                         uint8_t pl = sl[x];
+@@ -291,6 +325,7 @@ static void OutputFrames(decoder_t *p_dec)
+                         row_bot[x * 2]     = pr;
+                         row_bot[x * 2 + 1] = pr;
+                     }
++#endif
+                 }
+             }
+         }
+@@ -311,11 +346,32 @@ static void OutputFrames(decoder_t *p_dec)
+                     uint8_t *row_dst = dst + y * d_pitch;
+                     const uint8_t *row_l = src_l + y * s_stride;
+                     const uint8_t *row_r = src_r + y * s_stride;
++#if defined(__ARM_NEON) || defined(__aarch64__)
++                    int x = 0;
++                    for (; x + 16 <= w_half; x += 16)
++                    {
++                        uint8x16_t vl0 = vld1q_u8(row_l + x * 2);
++                        uint8x16_t vl1 = vld1q_u8(row_l + x * 2 + 16);
++                        uint8x16_t subl = vuzp1q_u8(vl0, vl1);
++                        vst1q_u8(row_dst + x, subl);
++
++                        uint8x16_t vr0 = vld1q_u8(row_r + x * 2);
++                        uint8x16_t vr1 = vld1q_u8(row_r + x * 2 + 16);
++                        uint8x16_t subr = vuzp1q_u8(vr0, vr1);
++                        vst1q_u8(row_dst + w_half + x, subr);
++                    }
++                    for (; x < w_half; x++)
++                    {
++                        row_dst[x] = row_l[x * 2];
++                        row_dst[w_half + x] = row_r[x * 2];
++                    }
++#else
+                     for (int x = 0; x < w_half; x++)
+                     {
+                         row_dst[x] = row_l[x * 2];
+                         row_dst[w_half + x] = row_r[x * 2];
+                     }
++#endif
+                 }
+             }
+         }
+@@ -356,6 +412,7 @@ static void SendNalWithRetry(decoder_t *p_dec, const uint8_t *nal, size_t size,
+     while ((res = edge264mvc_send_nal(p_sys->decoder, nal, size, pts, 0)) == EDGE264MVC_AGAIN)
+     {
+         OutputFrames(p_dec);
++        sched_yield();
+     }
+ }
+ 
+@@ -416,43 +473,47 @@ static void FeedExtraData(decoder_t *p_dec, const uint8_t *extra, size_t extra_s
+     if (!extra || extra_sz == 0)
+         return;
+ 
+-    if (extra_sz >= 7 && extra[0] == 1) // AVCDecoderConfigurationRecord
++    size_t cur = 0;
++    while (cur + 7 <= extra_sz)
+     {
+-        size_t off = 5;
+-        if (off < extra_sz)
++        const uint8_t *p = extra + cur;
++        size_t rem = extra_sz - cur;
++
++        if (p[0] == 1) // AVCDecoderConfigurationRecord or MVCDecoderConfigurationRecord
+         {
+-            int num_sps = extra[off++] & 0x1f;
+-            for (int i = 0; i < num_sps && off + 2 <= extra_sz; i++)
++            size_t off = 5;
++            if (off < rem)
+             {
+-                uint16_t len = ((uint16_t)extra[off] << 8) | extra[off+1];
+-                off += 2;
+-                if (off + len <= extra_sz)
+-                    SendNalWithRetry(p_dec, extra + off, len, VLC_TICK_INVALID);
+-                off += len;
++                int num_sps = p[off++] & 0x1f;
++                for (int i = 0; i < num_sps && off + 2 <= rem; i++)
++                {
++                    uint16_t len = ((uint16_t)p[off] << 8) | p[off+1];
++                    off += 2;
++                    if (off + len <= rem)
++                        SendNalWithRetry(p_dec, p + off, len, VLC_TICK_INVALID);
++                    off += len;
++                }
+             }
+-        }
+-        if (off < extra_sz)
+-        {
+-            int num_pps = extra[off++];
+-            for (int i = 0; i < num_pps && off + 2 <= extra_sz; i++)
++            if (off < rem)
+             {
+-                uint16_t len = ((uint16_t)extra[off] << 8) | extra[off+1];
+-                off += 2;
+-                if (off + len <= extra_sz)
+-                    SendNalWithRetry(p_dec, extra + off, len, VLC_TICK_INVALID);
+-                off += len;
++                int num_pps = p[off++];
++                for (int i = 0; i < num_pps && off + 2 <= rem; i++)
++                {
++                    uint16_t len = ((uint16_t)p[off] << 8) | p[off+1];
++                    off += 2;
++                    if (off + len <= rem)
++                        SendNalWithRetry(p_dec, p + off, len, VLC_TICK_INVALID);
++                    off += len;
++                }
+             }
++            cur += off;
+         }
+-        // If additional MVC SPS / extension bytes exist in extra
+-        if (off < extra_sz)
++        else
+         {
+-            FeedBuffer(p_dec, extra + off, extra_sz - off, VLC_TICK_INVALID);
++            FeedBuffer(p_dec, p, rem, VLC_TICK_INVALID);
++            break;
+         }
+     }
+-    else
+-    {
+-        FeedBuffer(p_dec, extra, extra_sz, VLC_TICK_INVALID);
+-    }
+ }
+ 
+ /*****************************************************************************
+-- 
+2.43.0
+

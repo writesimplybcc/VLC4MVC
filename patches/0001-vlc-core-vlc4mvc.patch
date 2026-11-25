@@ -1,0 +1,974 @@
+From c5bb91277a9737260dd96fdb9cf4f0eda812b172 Mon Sep 17 00:00:00 2001
+From: writesimplybcc <writesimply.bcc@gmail.com>
+Date: Mon, 23 Nov 2026 21:39:00 +0800
+Subject: [PATCH] VLC4MVC Core: MVC 3D decoding, stereoscopic shaders, 3D
+ subtitle parallax and dynamic SUP scaling
+
+---
+ modules/codec/Makefile.am                    |   7 +
+ modules/codec/vlc4mvc.c                      | 566 +++++++++++++++++++
+ modules/demux/mkv/matroska_segment_parse.cpp |  18 +
+ modules/demux/mkv/mkv.cpp                    |  22 +
+ modules/demux/mkv/util.cpp                   |  79 +++
+ modules/demux/mkv/util.hpp                   |   2 +
+ modules/video_output/opengl/vout_helper.c    |  32 +-
+ src/libvlc-module.c                          |   9 +
+ src/video_output/vout_subpictures.c          | 111 ++++
+ 9 files changed, 821 insertions(+), 25 deletions(-)
+ create mode 100644 modules/codec/vlc4mvc.c
+
+diff --git a/modules/codec/Makefile.am b/modules/codec/Makefile.am
+index 9fe74ac803..26046ead77 100644
+--- a/modules/codec/Makefile.am
++++ b/modules/codec/Makefile.am
+@@ -654,3 +654,10 @@ libgstdecode_plugin_la_LIBADD = $(GST_VIDEO_LIBS) $(GST_APP_LIBS)
+ if HAVE_GST_DECODE
+ codec_LTLIBRARIES += libgstdecode_plugin.la
+ endif
++
++libvlc4mvc_plugin_la_SOURCES = codec/vlc4mvc.c
++libvlc4mvc_plugin_la_CPPFLAGS = $(AM_CPPFLAGS) -I/root/edge264-mvc/build-android-arm64/edge264mvc-install/include
++libvlc4mvc_plugin_la_CFLAGS = $(AM_CFLAGS)
++libvlc4mvc_plugin_la_LDFLAGS = $(AM_LDFLAGS) -rpath '$(codecdir)'
++libvlc4mvc_plugin_la_LIBADD =
++codec_LTLIBRARIES += libvlc4mvc_plugin.la
+diff --git a/modules/codec/vlc4mvc.c b/modules/codec/vlc4mvc.c
+new file mode 100644
+index 0000000000..4b59e91c2f
+--- /dev/null
++++ b/modules/codec/vlc4mvc.c
+@@ -0,0 +1,566 @@
++/*****************************************************************************
++ * vlc4mvc.c: H.264 MVC 3D stereoscopic decoder for VLC (Nvidia Shield / Android TV)
++ * Powered by edge264-mvc
++ *****************************************************************************/
++
++#ifdef HAVE_CONFIG_H
++# include "config.h"
++#endif
++
++#include <vlc_common.h>
++#include <vlc_plugin.h>
++#include <vlc_codec.h>
++#include <vlc_picture.h>
++
++#include <edge264mvc.h>
++
++/*****************************************************************************
++ * Module descriptor
++ *****************************************************************************/
++#define VLC4MVC_OUTPUT_TEXT N_("3D Output Format")
++#define VLC4MVC_OUTPUT_LONGTEXT N_("Output format for 3D MVC: 0=Full-SBS (3840x1080), 1=Full-TAB (1920x2160), 2=Half-SBS (3840x2160), 3=Half-TAB (3840x2160), 4=Half-SBS (1920x1080), 5=Half-TAB (1920x1080), 6=2D Only")
++
++#define VLC4MVC_SWAP_TEXT N_("Swap 3D Eyes (Right/Left)")
++#define VLC4MVC_SWAP_LONGTEXT N_("Swap left and right eye views for inverted sync")
++
++#define VLC4MVC_THREADS_TEXT N_("MVC Decoding Threads")
++#define VLC4MVC_THREADS_LONGTEXT N_("Number of worker threads used for decoding (0=auto)")
++
++static const int pi_output_values[] = { 0, 1, 2, 3, 4, 5, 6 };
++static const char * const ppsz_output_descriptions[] = {
++    N_("Full-SBS (3840x1080 - Custom 3D resolution)"),
++    N_("Full-TAB (1920x2160 - Custom 3D resolution)"),
++    N_("Half-SBS (3840x2160 - 4K 3D TV / Projector)"),
++    N_("Half-TAB (3840x2160 - 4K 3D TV / Projector)"),
++    N_("Half-SBS (1920x1080 - Standard 3D TV / Projector)"),
++    N_("Half-TAB (1920x1080 - Standard 3D TV / Projector)"),
++    N_("2D Base View (1920x1080)")
++};
++
++static int OpenDecoder(vlc_object_t *);
++static void CloseDecoder(vlc_object_t *);
++
++vlc_module_begin ()
++    set_shortname("vlc4mvc")
++    set_description(N_("VLC4MVC H.264 MVC 3D decoder"))
++    set_capability("video decoder", 10005)
++    set_callbacks(OpenDecoder, CloseDecoder)
++    set_category(CAT_INPUT)
++    set_subcategory(SUBCAT_INPUT_VCODEC)
++
++    add_integer("vlc4mvc-output", 0, VLC4MVC_OUTPUT_TEXT, VLC4MVC_OUTPUT_LONGTEXT, false)
++        change_integer_list(pi_output_values, ppsz_output_descriptions)
++    add_bool("vlc4mvc-swap-eyes", false, VLC4MVC_SWAP_TEXT, VLC4MVC_SWAP_LONGTEXT, false)
++    add_integer("vlc4mvc-threads", 4, VLC4MVC_THREADS_TEXT, VLC4MVC_THREADS_LONGTEXT, false)
++vlc_module_end ()
++
++/*****************************************************************************
++ * Internal state
++ *****************************************************************************/
++struct decoder_sys_t
++{
++    Edge264MvcDecoder  *decoder;
++    int                 i_output_mode;
++    bool                b_swap_eyes;
++    int                 i_out_width;
++    int                 i_out_height;
++    bool                b_draining;
++    bool                b_extradata_fed;
++};
++
++static void FlushDecoder(decoder_t *p_dec)
++{
++    decoder_sys_t *p_sys = p_dec ? p_dec->p_sys : NULL;
++    if (p_sys)
++    {
++        p_sys->b_draining = false;
++        if (p_sys->decoder)
++            edge264mvc_flush(p_sys->decoder);
++    }
++}
++
++/*****************************************************************************
++ * Output decoded frames
++ *****************************************************************************/
++static void OutputFrames(decoder_t *p_dec)
++{
++    decoder_sys_t *p_sys = p_dec ? p_dec->p_sys : NULL;
++    if (!p_sys || !p_sys->decoder)
++        return;
++
++    Edge264MvcFrame mvc_frame;
++
++    while (edge264mvc_receive_frame(p_sys->decoder, &mvc_frame) == EDGE264MVC_OK)
++    {
++        bool b_is_3d = (mvc_frame.views[1].planes[0] != NULL && p_sys->i_output_mode != 6);
++        int out_w = mvc_frame.width_Y;
++        int out_h = mvc_frame.height_Y;
++        video_multiview_mode_t mv_mode = MULTIVIEW_2D;
++
++        unsigned sar_num = 1, sar_den = 1;
++        if (b_is_3d)
++        {
++            switch (p_sys->i_output_mode)
++            {
++                case 0: // Full-SBS (3840x1080 - Custom 3D resolution)
++                    out_w = mvc_frame.width_Y * 2;
++                    out_h = mvc_frame.height_Y;
++                    sar_num = 1;
++                    sar_den = 1;
++                    mv_mode = MULTIVIEW_STEREO_SBS;
++                    break;
++                case 1: // Full-TAB (1920x2160 - Custom 3D resolution)
++                    out_w = mvc_frame.width_Y;
++                    out_h = mvc_frame.height_Y * 2;
++                    sar_num = 1;
++                    sar_den = 1;
++                    mv_mode = MULTIVIEW_STEREO_TB;
++                    break;
++                case 2: // Half-SBS (3840x2160 - 4K 3D TV / Projector)
++                    out_w = mvc_frame.width_Y * 2;
++                    out_h = mvc_frame.height_Y * 2;
++                    sar_num = 1;
++                    sar_den = 1;
++                    mv_mode = MULTIVIEW_STEREO_SBS;
++                    break;
++                case 3: // Half-TAB (3840x2160 - 4K 3D TV / Projector)
++                    out_w = mvc_frame.width_Y * 2;
++                    out_h = mvc_frame.height_Y * 2;
++                    sar_num = 1;
++                    sar_den = 1;
++                    mv_mode = MULTIVIEW_STEREO_TB;
++                    break;
++                case 4: // Half-SBS (1920x1080 - Standard 3D TV / Projector)
++                    out_w = mvc_frame.width_Y;
++                    out_h = mvc_frame.height_Y;
++                    sar_num = 1;
++                    sar_den = 1;
++                    mv_mode = MULTIVIEW_STEREO_SBS;
++                    break;
++                case 5: // Half-TAB (1920x1080 - Standard 3D TV / Projector)
++                    out_w = mvc_frame.width_Y;
++                    out_h = mvc_frame.height_Y;
++                    sar_num = 1;
++                    sar_den = 1;
++                    mv_mode = MULTIVIEW_STEREO_TB;
++                    break;
++                default:
++                    break;
++            }
++        }
++
++        // Update format if dimensions changed
++        if (p_sys->i_out_width != out_w || p_sys->i_out_height != out_h)
++        {
++            p_dec->fmt_out.video.i_visible_width  = out_w;
++            p_dec->fmt_out.video.i_visible_height = out_h;
++            p_dec->fmt_out.video.i_width  = (out_w + 15) & ~15;
++            p_dec->fmt_out.video.i_height = (out_h + 15) & ~15;
++            p_dec->fmt_out.video.i_sar_num = sar_num;
++            p_dec->fmt_out.video.i_sar_den = sar_den;
++            p_dec->fmt_out.video.multiview_mode = mv_mode;
++            p_dec->fmt_out.video.i_chroma = p_dec->fmt_out.i_codec = VLC_CODEC_I420;
++
++            if (decoder_UpdateVideoFormat(p_dec) != VLC_SUCCESS)
++            {
++                edge264mvc_release_frame(p_sys->decoder, &mvc_frame);
++                continue;
++            }
++            p_sys->i_out_width = out_w;
++            p_sys->i_out_height = out_h;
++        }
++
++        picture_t *p_pic = decoder_NewPicture(p_dec);
++        if (!p_pic)
++        {
++            edge264mvc_release_frame(p_sys->decoder, &mvc_frame);
++            continue;
++        }
++
++        vlc_tick_t pts = mvc_frame.views[0].pts;
++        p_pic->date = pts;
++        p_pic->b_progressive = true;
++
++        const Edge264MvcView *v_l = p_sys->b_swap_eyes ? &mvc_frame.views[1] : &mvc_frame.views[0];
++        const Edge264MvcView *v_r = p_sys->b_swap_eyes ? &mvc_frame.views[0] : &mvc_frame.views[1];
++
++        if (!b_is_3d || !v_r->planes[0] || p_sys->i_output_mode == 6)
++        {
++            // 2D Blit
++            for (int p = 0; p < 3; p++)
++            {
++                int h = (p == 0) ? mvc_frame.height_Y : mvc_frame.height_C;
++                int w = (p == 0) ? mvc_frame.width_Y : mvc_frame.width_C;
++                int s_stride = (p == 0) ? mvc_frame.stride_Y : mvc_frame.stride_C;
++                int d_pitch = p_pic->p[p].i_pitch;
++                uint8_t *dst = p_pic->p[p].p_pixels;
++                const uint8_t *src = v_l->planes[p];
++                for (int y = 0; y < h; y++)
++                    memcpy(dst + y * d_pitch, src + y * s_stride, w);
++            }
++        }
++        else if (p_sys->i_output_mode == 0)
++        {
++            // Full-SBS (3840x1080)
++            for (int p = 0; p < 3; p++)
++            {
++                int h = (p == 0) ? mvc_frame.height_Y : mvc_frame.height_C;
++                int w = (p == 0) ? mvc_frame.width_Y : mvc_frame.width_C;
++                int s_stride = (p == 0) ? mvc_frame.stride_Y : mvc_frame.stride_C;
++                int d_pitch = p_pic->p[p].i_pitch;
++                uint8_t *dst = p_pic->p[p].p_pixels;
++                const uint8_t *src_l = v_l->planes[p];
++                const uint8_t *src_r = v_r->planes[p];
++                for (int y = 0; y < h; y++)
++                {
++                    memcpy(dst + y * d_pitch, src_l + y * s_stride, w);
++                    memcpy(dst + y * d_pitch + w, src_r + y * s_stride, w);
++                }
++            }
++        }
++        else if (p_sys->i_output_mode == 1)
++        {
++            // Full-TAB (1920x2160)
++            for (int p = 0; p < 3; p++)
++            {
++                int h = (p == 0) ? mvc_frame.height_Y : mvc_frame.height_C;
++                int w = (p == 0) ? mvc_frame.width_Y : mvc_frame.width_C;
++                int s_stride = (p == 0) ? mvc_frame.stride_Y : mvc_frame.stride_C;
++                int d_pitch = p_pic->p[p].i_pitch;
++                uint8_t *dst = p_pic->p[p].p_pixels;
++                const uint8_t *src_l = v_l->planes[p];
++                const uint8_t *src_r = v_r->planes[p];
++                for (int y = 0; y < h; y++)
++                    memcpy(dst + y * d_pitch, src_l + y * s_stride, w);
++                for (int y = 0; y < h; y++)
++                    memcpy(dst + (h + y) * d_pitch, src_r + y * s_stride, w);
++            }
++        }
++        else if (p_sys->i_output_mode == 2)
++        {
++            // 4K Half-SBS (3840x2160 container)
++            for (int p = 0; p < 3; p++)
++            {
++                int h = (p == 0) ? mvc_frame.height_Y : mvc_frame.height_C;
++                int w = (p == 0) ? mvc_frame.width_Y : mvc_frame.width_C;
++                int s_stride = (p == 0) ? mvc_frame.stride_Y : mvc_frame.stride_C;
++                int d_pitch = p_pic->p[p].i_pitch;
++                uint8_t *dst = p_pic->p[p].p_pixels;
++                const uint8_t *src_l = v_l->planes[p];
++                const uint8_t *src_r = v_r->planes[p];
++                for (int y = 0; y < h; y++)
++                {
++                    uint8_t *row_dst0 = dst + (y * 2) * d_pitch;
++                    uint8_t *row_dst1 = dst + (y * 2 + 1) * d_pitch;
++                    const uint8_t *sl = src_l + y * s_stride;
++                    const uint8_t *sr = src_r + y * s_stride;
++
++                    memcpy(row_dst0, sl, w);
++                    memcpy(row_dst0 + w, sr, w);
++                    memcpy(row_dst1, sl, w);
++                    memcpy(row_dst1 + w, sr, w);
++                }
++            }
++        }
++        else if (p_sys->i_output_mode == 3)
++        {
++            // 4K Half-TAB (3840x2160 container)
++            for (int p = 0; p < 3; p++)
++            {
++                int h = (p == 0) ? mvc_frame.height_Y : mvc_frame.height_C;
++                int w = (p == 0) ? mvc_frame.width_Y : mvc_frame.width_C;
++                int s_stride = (p == 0) ? mvc_frame.stride_Y : mvc_frame.stride_C;
++                int d_pitch = p_pic->p[p].i_pitch;
++                uint8_t *dst = p_pic->p[p].p_pixels;
++                const uint8_t *src_l = v_l->planes[p];
++                const uint8_t *src_r = v_r->planes[p];
++                for (int y = 0; y < h; y++)
++                {
++                    uint8_t *row_top = dst + y * d_pitch;
++                    uint8_t *row_bot = dst + (h + y) * d_pitch;
++                    const uint8_t *sl = src_l + y * s_stride;
++                    const uint8_t *sr = src_r + y * s_stride;
++
++                    for (int x = 0; x < w; x++)
++                    {
++                        uint8_t pl = sl[x];
++                        row_top[x * 2]     = pl;
++                        row_top[x * 2 + 1] = pl;
++
++                        uint8_t pr = sr[x];
++                        row_bot[x * 2]     = pr;
++                        row_bot[x * 2 + 1] = pr;
++                    }
++                }
++            }
++        }
++        else if (p_sys->i_output_mode == 4)
++        {
++            // Half-SBS (1920x1080)
++            for (int p = 0; p < 3; p++)
++            {
++                int h = (p == 0) ? mvc_frame.height_Y : mvc_frame.height_C;
++                int w_half = (p == 0) ? mvc_frame.width_Y / 2 : mvc_frame.width_C / 2;
++                int s_stride = (p == 0) ? mvc_frame.stride_Y : mvc_frame.stride_C;
++                int d_pitch = p_pic->p[p].i_pitch;
++                uint8_t *dst = p_pic->p[p].p_pixels;
++                const uint8_t *src_l = v_l->planes[p];
++                const uint8_t *src_r = v_r->planes[p];
++                for (int y = 0; y < h; y++)
++                {
++                    uint8_t *row_dst = dst + y * d_pitch;
++                    const uint8_t *row_l = src_l + y * s_stride;
++                    const uint8_t *row_r = src_r + y * s_stride;
++                    for (int x = 0; x < w_half; x++)
++                    {
++                        row_dst[x] = row_l[x * 2];
++                        row_dst[w_half + x] = row_r[x * 2];
++                    }
++                }
++            }
++        }
++        else if (p_sys->i_output_mode == 5)
++        {
++            // Half-TAB (1920x1080)
++            for (int p = 0; p < 3; p++)
++            {
++                int h_half = (p == 0) ? mvc_frame.height_Y / 2 : mvc_frame.height_C / 2;
++                int w = (p == 0) ? mvc_frame.width_Y : mvc_frame.width_C;
++                int s_stride = (p == 0) ? mvc_frame.stride_Y : mvc_frame.stride_C;
++                int d_pitch = p_pic->p[p].i_pitch;
++                uint8_t *dst = p_pic->p[p].p_pixels;
++                const uint8_t *src_l = v_l->planes[p];
++                const uint8_t *src_r = v_r->planes[p];
++                for (int y = 0; y < h_half; y++)
++                    memcpy(dst + y * d_pitch, src_l + (y * 2) * s_stride, w);
++                for (int y = 0; y < h_half; y++)
++                    memcpy(dst + (h_half + y) * d_pitch, src_r + (y * 2) * s_stride, w);
++            }
++        }
++
++        decoder_QueueVideo(p_dec, p_pic);
++        edge264mvc_release_frame(p_sys->decoder, &mvc_frame);
++    }
++}
++
++/*****************************************************************************
++ * Send NAL with flow control
++ *****************************************************************************/
++static void SendNalWithRetry(decoder_t *p_dec, const uint8_t *nal, size_t size, vlc_tick_t pts)
++{
++    decoder_sys_t *p_sys = p_dec ? p_dec->p_sys : NULL;
++    if (!p_sys || !p_sys->decoder || !nal || size == 0)
++        return;
++
++    int res;
++    while ((res = edge264mvc_send_nal(p_sys->decoder, nal, size, pts, 0)) == EDGE264MVC_AGAIN)
++    {
++        OutputFrames(p_dec);
++    }
++}
++
++/*****************************************************************************
++ * Parse and feed NALs from buffer (handles Annex-B and AVCC)
++ *****************************************************************************/
++static void FeedBuffer(decoder_t *p_dec, const uint8_t *p_buf, size_t i_buf, vlc_tick_t pts)
++{
++    if (!p_buf || i_buf == 0)
++        return;
++
++    bool b_annexb = (i_buf >= 4 && p_buf[0] == 0 && p_buf[1] == 0 &&
++                     (p_buf[2] == 1 || (p_buf[2] == 0 && p_buf[3] == 1)));
++
++    if (b_annexb)
++    {
++        size_t pos = 0;
++        while (pos < i_buf)
++        {
++            size_t sc_offset = edge264mvc_find_start_code(p_buf + pos, i_buf - pos);
++            if (sc_offset == i_buf - pos) break;
++            pos += sc_offset;
++            size_t sc_len = (pos + 2 < i_buf && p_buf[pos+2] == 1) ? 3 : 4;
++            size_t nal_start = pos + sc_len;
++            pos = nal_start;
++            size_t next_sc = edge264mvc_find_start_code(p_buf + pos, i_buf - pos);
++            size_t nal_len = next_sc;
++            while (nal_len > 0 && p_buf[nal_start + nal_len - 1] == 0)
++                nal_len--;
++            if (nal_len > 0)
++                SendNalWithRetry(p_dec, p_buf + nal_start, nal_len, pts);
++        }
++    }
++    else
++    {
++        // AVCC length-prefixed
++        size_t pos = 0;
++        while (pos + 4 <= i_buf)
++        {
++            uint32_t nal_len = ((uint32_t)p_buf[pos] << 24) |
++                               ((uint32_t)p_buf[pos+1] << 16) |
++                               ((uint32_t)p_buf[pos+2] << 8) |
++                               (uint32_t)p_buf[pos+3];
++            pos += 4;
++            if (pos + nal_len > i_buf) break;
++            if (nal_len > 0)
++                SendNalWithRetry(p_dec, p_buf + pos, nal_len, pts);
++            pos += nal_len;
++        }
++    }
++}
++
++/*****************************************************************************
++ * Feed extradata (AVCDecoderConfigurationRecord / SPS / PPS / Subset SPS)
++ *****************************************************************************/
++static void FeedExtraData(decoder_t *p_dec, const uint8_t *extra, size_t extra_sz)
++{
++    if (!extra || extra_sz == 0)
++        return;
++
++    if (extra_sz >= 7 && extra[0] == 1) // AVCDecoderConfigurationRecord
++    {
++        size_t off = 5;
++        if (off < extra_sz)
++        {
++            int num_sps = extra[off++] & 0x1f;
++            for (int i = 0; i < num_sps && off + 2 <= extra_sz; i++)
++            {
++                uint16_t len = ((uint16_t)extra[off] << 8) | extra[off+1];
++                off += 2;
++                if (off + len <= extra_sz)
++                    SendNalWithRetry(p_dec, extra + off, len, VLC_TICK_INVALID);
++                off += len;
++            }
++        }
++        if (off < extra_sz)
++        {
++            int num_pps = extra[off++];
++            for (int i = 0; i < num_pps && off + 2 <= extra_sz; i++)
++            {
++                uint16_t len = ((uint16_t)extra[off] << 8) | extra[off+1];
++                off += 2;
++                if (off + len <= extra_sz)
++                    SendNalWithRetry(p_dec, extra + off, len, VLC_TICK_INVALID);
++                off += len;
++            }
++        }
++        // If additional MVC SPS / extension bytes exist in extra
++        if (off < extra_sz)
++        {
++            FeedBuffer(p_dec, extra + off, extra_sz - off, VLC_TICK_INVALID);
++        }
++    }
++    else
++    {
++        FeedBuffer(p_dec, extra, extra_sz, VLC_TICK_INVALID);
++    }
++}
++
++/*****************************************************************************
++ * Decode: process an incoming block
++ *****************************************************************************/
++static int Decode(decoder_t *p_dec, block_t *p_block)
++{
++    decoder_sys_t *p_sys = p_dec ? p_dec->p_sys : NULL;
++    if (!p_sys || !p_sys->decoder)
++    {
++        if (p_block) block_Release(p_block);
++        return VLCDEC_SUCCESS;
++    }
++
++    if (!p_block)
++    {
++        // Drain pipeline
++        if (!p_sys->b_draining)
++        {
++            p_sys->b_draining = true;
++            edge264mvc_send_end(p_sys->decoder);
++            OutputFrames(p_dec);
++        }
++        return VLCDEC_SUCCESS;
++    }
++
++    p_sys->b_draining = false;
++
++    if (!p_sys->b_extradata_fed)
++    {
++        p_sys->b_extradata_fed = true;
++        if (p_dec->fmt_in.i_extra > 0 && p_dec->fmt_in.p_extra)
++        {
++            FeedExtraData(p_dec, (const uint8_t *)p_dec->fmt_in.p_extra, p_dec->fmt_in.i_extra);
++        }
++    }
++
++    if (p_block->i_flags & BLOCK_FLAG_DISCONTINUITY)
++        FlushDecoder(p_dec);
++
++    if (p_block->i_flags & BLOCK_FLAG_CORRUPTED)
++    {
++        block_Release(p_block);
++        return VLCDEC_SUCCESS;
++    }
++
++    vlc_tick_t pts = (p_block->i_pts > VLC_TICK_INVALID) ? p_block->i_pts : p_block->i_dts;
++    FeedBuffer(p_dec, p_block->p_buffer, p_block->i_buffer, pts);
++    OutputFrames(p_dec);
++
++    block_Release(p_block);
++    return VLCDEC_SUCCESS;
++}
++
++/*****************************************************************************
++ * OpenDecoder: initialize decoder
++ *****************************************************************************/
++static int OpenDecoder(vlc_object_t *p_this)
++{
++    decoder_t *p_dec = (decoder_t *)p_this;
++
++    if (p_dec->fmt_in.i_codec != VLC_CODEC_H264 &&
++        p_dec->fmt_in.i_codec != VLC_FOURCC('a','v','c','1'))
++    {
++        return VLC_EGENERIC;
++    }
++
++    decoder_sys_t *p_sys = vlc_obj_malloc(p_this, sizeof(*p_sys));
++    if (!p_sys)
++        return VLC_ENOMEM;
++
++    memset(p_sys, 0, sizeof(*p_sys));
++    p_sys->i_output_mode = var_InheritInteger(p_this, "vlc4mvc-output");
++    p_sys->b_swap_eyes = var_InheritBool(p_this, "vlc4mvc-swap-eyes");
++
++    Edge264MvcSettings settings;
++    edge264mvc_default_settings(&settings);
++    int threads = var_InheritInteger(p_this, "vlc4mvc-threads");
++    if (threads > 0)
++        settings.n_threads = threads;
++
++    if (edge264mvc_open(&p_sys->decoder, &settings) != EDGE264MVC_OK)
++    {
++        msg_Err(p_dec, "Failed to initialize edge264-mvc decoder");
++        return VLC_EGENERIC;
++    }
++
++    p_dec->fmt_out.i_codec = VLC_CODEC_I420;
++    p_dec->pf_decode = Decode;
++    p_dec->pf_flush  = FlushDecoder;
++    p_dec->p_sys     = p_sys;
++
++    msg_Info(p_dec, "VLC4MVC stereoscopic decoder activated (3D mode: %d)", p_sys->i_output_mode);
++    return VLC_SUCCESS;
++}
++
++/*****************************************************************************
++ * CloseDecoder: free resources
++ *****************************************************************************/
++static void CloseDecoder(vlc_object_t *p_this)
++{
++    decoder_t *p_dec = (decoder_t *)p_this;
++    decoder_sys_t *p_sys = p_dec ? p_dec->p_sys : NULL;
++
++    if (p_sys)
++    {
++        if (p_sys->decoder)
++            edge264mvc_close(&p_sys->decoder);
++        p_dec->p_sys = NULL;
++    }
++}
+diff --git a/modules/demux/mkv/matroska_segment_parse.cpp b/modules/demux/mkv/matroska_segment_parse.cpp
+index 67edba6435..2c5c508c8b 100644
+--- a/modules/demux/mkv/matroska_segment_parse.cpp
++++ b/modules/demux/mkv/matroska_segment_parse.cpp
+@@ -345,6 +345,24 @@ void matroska_segment_c::ParseTrackEntry( const KaxTrackEntry *m )
+         {
+             debug( vars, "Track Max BlockAdditionID=%d", static_cast<uint32>( mbl ) ) ;
+         }
++        E_CASE( KaxBlockAdditionMapping, bam )
++        {
++            auto add_extra = FindChild<KaxBlockAddIDExtraData>( bam );
++            if( add_extra && add_extra->GetSize() > 0 )
++            {
++                size_t old_sz = vars.tk->i_extra_data;
++                size_t add_sz = add_extra->GetSize();
++                uint8_t *new_p = static_cast<uint8_t*>( realloc( vars.tk->p_extra_data, old_sz + add_sz ) );
++                if( new_p )
++                {
++                    memcpy( new_p + old_sz, add_extra->GetBuffer(), add_sz );
++                    vars.tk->p_extra_data = new_p;
++                    vars.tk->i_extra_data = old_sz + add_sz;
++                }
++                vars.tk->fmt.video.multiview_mode = MULTIVIEW_STEREO_SBS;
++                vars.tk->fmt.i_profile = 118;
++            }
++        }
+         E_CASE( KaxTrackName, tname )
+         {
+             free(vars.tk->fmt.psz_description);
+diff --git a/modules/demux/mkv/mkv.cpp b/modules/demux/mkv/mkv.cpp
+index fd96c26a91..cb2191db84 100644
+--- a/modules/demux/mkv/mkv.cpp
++++ b/modules/demux/mkv/mkv.cpp
+@@ -589,6 +589,28 @@ static void BlockDecode( demux_t *p_demux, KaxBlock *block, KaxSimpleBlock *simp
+             continue;
+          }
+ 
++         case VLC_CODEC_H264:
++         case VLC_FOURCC( 'a', 'v', 'c', '1' ):
++            {
++                if( additions )
++                {
++                    auto blockmore = FindChild<const KaxBlockMore>(*additions);
++                    if( blockmore )
++                    {
++                        auto addition = FindChild<const KaxBlockAdditional>(*blockmore);
++                        if( addition && addition->GetSize() > 0 )
++                        {
++                            p_block = MKV_Append_MVC_Addition( p_block,
++                                reinterpret_cast<const uint8_t *>(addition->GetBuffer()),
++                                static_cast<size_t>(addition->GetSize()) );
++                            if( !p_block )
++                                continue;
++                        }
++                    }
++                }
++            }
++            break;
++
+          case VLC_CODEC_WEBVTT:
+             {
+                 const uint8_t *p_addition = NULL;
+diff --git a/modules/demux/mkv/util.cpp b/modules/demux/mkv/util.cpp
+index 78a662e9ea..0ba845164d 100644
+--- a/modules/demux/mkv/util.cpp
++++ b/modules/demux/mkv/util.cpp
+@@ -615,3 +615,82 @@ void MkvTree( demux_t & demuxer, int i_level, const char *psz_format, ... )
+     MkvTree_va( demuxer, i_level, psz_format, args );
+     va_end( args );
+ }
++
++block_t * MKV_Append_MVC_Addition( block_t *p_block, const uint8_t *p_add, size_t i_add )
++{
++    if( !p_block || !p_add || i_add == 0 )
++        return p_block;
++
++    size_t old_sz = p_block->i_buffer;
++    bool block_is_annexb = (old_sz >= 4 && p_block->p_buffer[0] == 0 && p_block->p_buffer[1] == 0 &&
++                            (p_block->p_buffer[2] == 1 || (p_block->p_buffer[2] == 0 && p_block->p_buffer[3] == 1)));
++
++    bool add_is_annexb = (i_add >= 4 && p_add[0] == 0 && p_add[1] == 0 &&
++                          (p_add[2] == 1 || (p_add[2] == 0 && p_add[3] == 1)));
++
++    if( block_is_annexb == add_is_annexb )
++    {
++        p_block = block_Realloc( p_block, 0, old_sz + i_add );
++        if( likely( p_block ) )
++            memcpy( p_block->p_buffer + old_sz, p_add, i_add );
++        return p_block;
++    }
++
++    if( !block_is_annexb && add_is_annexb )
++    {
++        p_block = block_Realloc( p_block, 0, old_sz + i_add + 32 );
++        if( unlikely( !p_block ) ) return NULL;
++
++        size_t pos = 0;
++        size_t out_pos = old_sz;
++        while( pos < i_add )
++        {
++            while( pos + 3 <= i_add && (p_add[pos] != 0 || p_add[pos+1] != 0 || (p_add[pos+2] != 1 && (pos + 4 > i_add || p_add[pos+2] != 0 || p_add[pos+3] != 1))) )
++                pos++;
++            if( pos >= i_add ) break;
++            size_t sc_len = (p_add[pos+2] == 1) ? 3 : 4;
++            size_t nal_start = pos + sc_len;
++            size_t next = nal_start;
++            while( next + 3 <= i_add && (p_add[next] != 0 || p_add[next+1] != 0 || (p_add[next+2] != 1 && (next + 4 > i_add || p_add[next+2] != 0 || p_add[next+3] != 1))) )
++                next++;
++            if( next > i_add ) next = i_add;
++            size_t nal_size = next - nal_start;
++            if( nal_size > 0 )
++            {
++                p_block->p_buffer[out_pos++] = (nal_size >> 24) & 0xff;
++                p_block->p_buffer[out_pos++] = (nal_size >> 16) & 0xff;
++                p_block->p_buffer[out_pos++] = (nal_size >> 8) & 0xff;
++                p_block->p_buffer[out_pos++] = nal_size & 0xff;
++                memcpy( p_block->p_buffer + out_pos, p_add + nal_start, nal_size );
++                out_pos += nal_size;
++            }
++            pos = next;
++        }
++        p_block->i_buffer = out_pos;
++        return p_block;
++    }
++
++    p_block = block_Realloc( p_block, 0, old_sz + i_add + 32 );
++    if( unlikely( !p_block ) ) return NULL;
++
++    size_t pos = 0;
++    size_t out_pos = old_sz;
++    while( pos + 4 <= i_add )
++    {
++        uint32_t nal_len = (static_cast<uint32_t>(p_add[pos]) << 24) |
++                           (static_cast<uint32_t>(p_add[pos+1]) << 16) |
++                           (static_cast<uint32_t>(p_add[pos+2]) << 8) |
++                           static_cast<uint32_t>(p_add[pos+3]);
++        pos += 4;
++        if( pos + nal_len > i_add ) break;
++        p_block->p_buffer[out_pos++] = 0x00;
++        p_block->p_buffer[out_pos++] = 0x00;
++        p_block->p_buffer[out_pos++] = 0x00;
++        p_block->p_buffer[out_pos++] = 0x01;
++        memcpy( p_block->p_buffer + out_pos, p_add + pos, nal_len );
++        out_pos += nal_len;
++        pos += nal_len;
++    }
++    p_block->i_buffer = out_pos;
++    return p_block;
++}
+diff --git a/modules/demux/mkv/util.hpp b/modules/demux/mkv/util.hpp
+index 0c91a2658f..834eeaaafe 100644
+--- a/modules/demux/mkv/util.hpp
++++ b/modules/demux/mkv/util.hpp
+@@ -119,3 +119,5 @@ block_t * packetize_wavpack( const mkv_track_t &, uint8_t *, size_t);
+ /* helper functions to print the mkv parse tree */
+ void MkvTree_va( demux_t& demuxer, int i_level, const char* fmt, va_list args);
+ void MkvTree( demux_t & demuxer, int i_level, const char *psz_format, ... );
++
++block_t * MKV_Append_MVC_Addition( block_t *p_block, const uint8_t *p_add, size_t i_add );
+diff --git a/modules/video_output/opengl/vout_helper.c b/modules/video_output/opengl/vout_helper.c
+index 13d65e04c8..c9c372d00f 100644
+--- a/modules/video_output/opengl/vout_helper.c
++++ b/modules/video_output/opengl/vout_helper.c
+@@ -1624,7 +1624,7 @@ static void DrawWithShaders(vout_display_opengl_t *vgl, struct prgm *prgm)
+ }
+ 
+ 
+-static void GetTextureCropParamsForStereo(unsigned i_nbTextures,
++static void __attribute__((unused)) GetTextureCropParamsForStereo(unsigned i_nbTextures,
+                                           const float *stereoCoefs,
+                                           const float *stereoOffsets,
+                                           float *left, float *top,
+@@ -1646,30 +1646,12 @@ static void TextureCropForStereo(vout_display_opengl_t *vgl,
+                                  float *left, float *top,
+                                  float *right, float *bottom)
+ {
+-    float stereoCoefs[2];
+-    float stereoOffsets[2];
+-
+-    switch (vgl->fmt.multiview_mode)
+-    {
+-    case MULTIVIEW_STEREO_TB:
+-        // Display only the left eye.
+-        stereoCoefs[0] = 1; stereoCoefs[1] = 0.5;
+-        stereoOffsets[0] = 0; stereoOffsets[1] = 0;
+-        GetTextureCropParamsForStereo(vgl->prgm->tc->tex_count,
+-                                      stereoCoefs, stereoOffsets,
+-                                      left, top, right, bottom);
+-        break;
+-    case MULTIVIEW_STEREO_SBS:
+-        // Display only the left eye.
+-        stereoCoefs[0] = 0.5; stereoCoefs[1] = 1;
+-        stereoOffsets[0] = 0; stereoOffsets[1] = 0;
+-        GetTextureCropParamsForStereo(vgl->prgm->tc->tex_count,
+-                                      stereoCoefs, stereoOffsets,
+-                                      left, top, right, bottom);
+-        break;
+-    default:
+-        break;
+-    }
++    // In VLC4MVC, preserve full stereoscopic 3D frame (SBS / TAB) for 3D displays
++    VLC_UNUSED(vgl);
++    VLC_UNUSED(left);
++    VLC_UNUSED(top);
++    VLC_UNUSED(right);
++    VLC_UNUSED(bottom);
+ }
+ 
+ int vout_display_opengl_Display(vout_display_opengl_t *vgl,
+diff --git a/src/libvlc-module.c b/src/libvlc-module.c
+index 56342523f3..82e75634c5 100644
+--- a/src/libvlc-module.c
++++ b/src/libvlc-module.c
+@@ -1700,6 +1700,15 @@ vlc_module_begin ()
+     add_integer_with_range( "sub-text-scale", 100, 10, 500,
+                SUB_TEXT_SCALE_TEXT, SUB_TEXT_SCALE_LONGTEXT, false )
+         change_volatile  ()
++    add_integer_with_range( "vlc4mvc-sub-scale", 100, 20, 300,
++               "3D/SUP Subtitle scale percentage", "Scaling factor for bitmap/SUP subtitles", false )
++        change_volatile  ()
++    add_integer( "vlc4mvc-screen-ar", 0,
++                 "VLC4MVC Screen Aspect Ratio", "0: 16:9, 1: 2.39:1 CIH", false )
++        change_volatile  ()
++    add_integer( "vlc4mvc-sub-depth", 8,
++                 "VLC4MVC 3D Subtitle Parallax", "Horizontal parallax offset in pixels", false )
++        change_volatile  ()
+     set_section( N_( "Overlays" ) , NULL )
+     add_module_list( "sub-source", "sub source", NULL,
+                      SUB_SOURCE_TEXT, SUB_SOURCE_LONGTEXT, false )
+diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpictures.c
+index 68dde84113..5e7bc631f0 100644
+--- a/src/video_output/vout_subpictures.c
++++ b/src/video_output/vout_subpictures.c
+@@ -999,6 +999,105 @@ exit:
+     }
+ }
+ 
++static void VLC4MVC_PostProcessSubpictures(spu_t *spu, subpicture_t *output, const video_format_t *fmt_dst)
++{
++    if (!output || !output->p_region)
++        return;
++
++    int screen_ar = var_InheritInteger(spu, "vlc4mvc-screen-ar");
++    int parallax = var_InheritInteger(spu, "vlc4mvc-sub-depth");
++    if (parallax <= 0)
++        parallax = 8; // Default 3D parallax offset in pixels
++
++    int canvas_w = fmt_dst->i_visible_width;
++    int canvas_h = fmt_dst->i_visible_height;
++
++    int sub_scale = var_InheritInteger(spu, "vlc4mvc-sub-scale");
++    int view_w = (fmt_dst->multiview_mode == MULTIVIEW_STEREO_SBS || canvas_w > 1920) ? (canvas_w / 2) : canvas_w;
++    int view_h = (fmt_dst->multiview_mode == MULTIVIEW_STEREO_TB || canvas_h > 1080) ? (canvas_h / 2) : canvas_h;
++
++    // Re-center horizontally if bitmap subtitles were scaled
++    if (sub_scale > 20 && sub_scale < 300 && sub_scale != 100)
++    {
++        for (subpicture_region_t *r = output->p_region; r != NULL; r = r->p_next)
++        {
++            if (r->fmt.i_visible_width > 0 && r->fmt.i_visible_width < (unsigned)view_w)
++            {
++                r->i_x = (view_w - (int)r->fmt.i_visible_width) / 2;
++            }
++        }
++    }
++
++    // CIH 2.39:1 active picture clamp
++    if (screen_ar == 1)
++    {
++        int view_w = (fmt_dst->multiview_mode == MULTIVIEW_STEREO_SBS || canvas_w > 1920) ? (canvas_w / 2) : canvas_w;
++        int view_h = (fmt_dst->multiview_mode == MULTIVIEW_STEREO_TB || canvas_h > 1080) ? (canvas_h / 2) : canvas_h;
++        int active_h = (int)((double)view_w / 2.39);
++        int bar_h = (view_h - active_h) / 2;
++
++        if (bar_h > 0)
++        {
++            int max_y = view_h - bar_h - 20; // 20px margin inside active video
++            for (subpicture_region_t *r = output->p_region; r != NULL; r = r->p_next)
++            {
++                int r_h = r->fmt.i_visible_height ? r->fmt.i_visible_height : 60;
++                if (r->i_y + r_h > max_y)
++                {
++                    r->i_y = max_y - r_h;
++                    if (r->i_y < bar_h) r->i_y = bar_h;
++                }
++            }
++        }
++    }
++
++    // 3D stereoscopic subtitle duplication (Left eye / Right eye parallax)
++    if (fmt_dst->multiview_mode == MULTIVIEW_STEREO_SBS || canvas_w > 1920)
++    {
++        int eye_w = canvas_w / 2;
++        subpicture_region_t *orig_head = output->p_region;
++        subpicture_region_t **tail_ptr = &output->p_region;
++        while (*tail_ptr) tail_ptr = &(*tail_ptr)->p_next;
++
++        for (subpicture_region_t *r = orig_head; r != NULL; r = r->p_next)
++        {
++            r->i_x -= parallax;
++            if (r->i_x < 0) r->i_x = 0;
++
++            subpicture_region_t *copy = subpicture_region_Copy(r);
++            if (copy)
++            {
++                copy->i_x = r->i_x + eye_w + 2 * parallax;
++                copy->p_next = NULL;
++                *tail_ptr = copy;
++                tail_ptr = &copy->p_next;
++            }
++        }
++    }
++    else if (fmt_dst->multiview_mode == MULTIVIEW_STEREO_TB || canvas_h > 1080)
++    {
++        int eye_h = canvas_h / 2;
++        subpicture_region_t *orig_head = output->p_region;
++        subpicture_region_t **tail_ptr = &output->p_region;
++        while (*tail_ptr) tail_ptr = &(*tail_ptr)->p_next;
++
++        for (subpicture_region_t *r = orig_head; r != NULL; r = r->p_next)
++        {
++            r->i_x -= parallax;
++
++            subpicture_region_t *copy = subpicture_region_Copy(r);
++            if (copy)
++            {
++                copy->i_x = r->i_x + 2 * parallax;
++                copy->i_y = r->i_y + eye_h;
++                copy->p_next = NULL;
++                *tail_ptr = copy;
++                tail_ptr = &copy->p_next;
++            }
++        }
++    }
++}
++
+ /**
+  * This function renders all sub picture units in the list.
+  */
+@@ -1109,6 +1208,16 @@ static subpicture_t *SpuRenderSubpictures(spu_t *spu,
+                                                   fmt_dst->i_visible_height,
+                                                   subpic->i_original_picture_height);
+ 
++            if (subpic->b_subtitle && region->fmt.i_chroma != VLC_CODEC_TEXT)
++            {
++                int sub_scale = var_InheritInteger(spu, "vlc4mvc-sub-scale");
++                if (sub_scale >= 20 && sub_scale <= 300 && sub_scale != 100)
++                {
++                    scale.w = (scale.w * sub_scale) / 100;
++                    scale.h = (scale.h * sub_scale) / 100;
++                }
++            }
++
+             /* Check scale validity */
+             if (scale.w <= 0 || scale.h <= 0)
+                 continue;
+@@ -1140,6 +1249,8 @@ static subpicture_t *SpuRenderSubpictures(spu_t *spu,
+     if (subtitle_area != subtitle_area_buffer)
+         free(subtitle_area);
+ 
++    VLC4MVC_PostProcessSubpictures(spu, output, fmt_dst);
++
+     return output;
+ }
+ 
+-- 
+2.43.0
+

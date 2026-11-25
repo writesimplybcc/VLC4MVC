@@ -1,0 +1,271 @@
+From 0d47c95cd4a4ea52d4e946d14a8d570f651647f5 Mon Sep 17 00:00:00 2001
+From: writesimplybcc <writesimply.bcc@gmail.com>
+Date: Tue, 24 Nov 2026 02:58:47 +0800
+Subject: [PATCH] VLC4MVC: Add Monochrome Silver theme, in-app credits, and
+ hardware compatibility docs
+
+---
+ README.md                                     | 76 ++++++++++++++++---
+ .../resources/src/main/res/values/arrays.xml  |  2 +
+ .../resources/src/main/res/values/strings.xml |  8 +-
+ .../videolan/television/ui/MainTvFragment.kt  |  1 +
+ .../television/ui/browser/BaseTvActivity.kt   |  1 +
+ application/vlc-android/res/values/styles.xml | 13 ++++
+ .../org/videolan/vlc/gui/helpers/UiTools.kt   |  1 +
+ 7 files changed, 88 insertions(+), 14 deletions(-)
+
+diff --git a/README.md b/README.md
+index 1ee8c7736..5b7851f54 100644
+--- a/README.md
++++ b/README.md
+@@ -5,7 +5,9 @@
+ [![Optimized for: Nvidia Shield Pro](https://img.shields.io/badge/Optimized%20for-Nvidia%20Shield%20Pro-76B900.svg)](https://www.nvidia.com/en-us/shield/)
+ [![Architecture: arm64-v8a](https://img.shields.io/badge/Arch-arm64--v8a-orange.svg)](#installation)
+ 
+-**VLC4MVC** is a high-performance open-source fork of VLC for Android TV, engineered specifically to play full-quality **3D MVC (Multiview Video Coding) Blu-ray rips** directly on the **Nvidia Shield TV Pro** without paying for expensive subscription software (such as Aspecta).
++> **Imagined by writesimply.bcc • Coded by Gemini**
++
++**VLC4MVC** is a high-performance open-source fork of VLC for Android TV, engineered specifically to play full-quality **3D MVC (Multiview Video Coding) Blu-ray rips** directly on the **Nvidia Shield TV Pro** and other Android media players without paying for expensive subscription software (such as Aspecta).
+ 
+ Whether connected to a 4K 3D projector (such as the **NexiGo Aurora Pro**, **Formovie Theater**, **BenQ**, or **Optoma**) or a 3D OLED/LED TV, VLC4MVC decodes both the base AVC stream and dependent MVC stream in real time and transforms them into your display's native 3D stereoscopic format.
+ 
+@@ -14,6 +16,7 @@ Whether connected to a 4K 3D projector (such as the **NexiGo Aurora Pro**, **For
+ ## Table of Contents
+ 
+ - [Key Features](#key-features)
++- [Supported Android Devices & Hardware](#supported-android-devices--hardware)
+ - [Stereoscopic 3D Output Modes](#stereoscopic-3d-output-modes)
+ - [3D Blu-ray (PGS / SUP) Subtitle System](#3d-blu-ray-pgs--sup-subtitle-system)
+ - [UI & Theme Customization](#ui--theme-customization)
+@@ -26,7 +29,8 @@ Whether connected to a 4K 3D projector (such as the **NexiGo Aurora Pro**, **For
+   - [Recommended Projector Configuration (NexiGo Aurora Pro Example)](#recommended-projector-configuration)
+   - [Remote Control Shortcuts](#remote-control-shortcuts)
+ - [Building from Source](#building-from-source)
+-- [License & Acknowledgments](#license--acknowledgments)
++- [Authors & Acknowledgments](#authors--acknowledgments)
++- [License](#license)
+ 
+ ---
+ 
+@@ -45,12 +49,52 @@ Whether connected to a 4K 3D projector (such as the **NexiGo Aurora Pro**, **For
+ - **Instant Eye Swapping:**
+   Toggle left/right eye order instantly via the on-screen menu without having to invert your projector 3D sync glasses.
+ - **Customizable TV Interface & Accent Colors:**
+-  Choose between 5 bespoke themes: Matrix Green, Classic Orange, Cyber Blue, Cinema Red, and Neon Purple.
++  Choose between 6 bespoke themes: Matrix Green, Classic Orange, Cyber Blue, Cinema Red, Neon Purple, and Monochrome Silver.
+ - **100% Free & Open Source:**
+   No subscriptions, no recurring in-app purchases, no telemetry, and no account requirements.
+ 
+ ---
+ 
++## Supported Android Devices & Hardware
++
++VLC4MVC works universally across Android TV, Google TV, and Android media players because it internally synthesizes stereoscopic video into standard HDMI frames (Side-by-Side and Top-and-Bottom). This bypasses the obsolete HDMI 1.4 hardware handshake requirement that prevents standard players from working on modern streaming boxes.
++
++### Tier 1: Reference Flagship (Recommended for 4K 3D Home Theaters)
++* **Nvidia Shield TV Pro (2019 & 2015/2017):**
++  * **SoC:** Nvidia Tegra X1 / X1+ (256-core Maxwell GPU).
++  * **Why it's #1:** Maximum GPU horsepower for OpenGL 3D compositing, lossless audio passthrough (TrueHD Atmos, DTS-HD MA), and high-bandwidth Gigabit SMB streaming.
++
++### Tier 2: Dedicated Videophile & Audiophile Media Players
++* **Zidoo Series (Realtek RTD1619DR / RTD1619BPD):**
++  * Z9X, Z9X Pro, Z10 Pro, Z20 Pro, Z1000 Pro, Z2000 Pro, UHD3000, UHD5000, UHD8000.
++* **Dune HD Series:**
++  * Pro Vision 4K Solo, Real Vision 4K / 4K Plus, Max Vision 4K, Dune HD Homatics Box R 4K Plus.
++* **Ugoos Series (Amlogic S922X / S928X):**
++  * AM6 Plus, AM6B Plus (the community standard for dual-boot Android/CoreELEC), SK1, AM8, KM6.
++* **Beelink Series:**
++  * GT-King, GT-King Pro (Amlogic S922X-H).
++
++### Tier 3: Certified Android TV & Google TV Streamers
++* **Homatics Box R 4K Plus / Nokia Streaming Box 8010 / RockTek G2:**
++  * High-performance Amlogic S905X4-K with 4GB RAM and Gigabit Ethernet.
++* **Amazon Fire TV Cube (3rd Gen - 2022 & 2nd Gen - 2019):**
++  * Powerful Octa-Core POP1-G / Hexa-Core S922X processor with direct HDMI output. Easily installed via the Downloader app.
++* **Amazon Fire TV Stick 4K Max (2nd Gen - 2023):**
++  * MediaTek MT8696T quad-core 2.0 GHz streaming stick.
++* **Minix NEO Series:**
++  * NEO T5, NEO U22-XJ.
++
++### Tier 4: Direct Installation on 3D Projectors & Smart Laser TVs
++If you prefer not to use an external HDMI box, VLC4MVC can be sideloaded directly into your projector's built-in Android OS:
++* **NexiGo Aurora Pro** (Built-in Android system)
++* **Formovie Theater & Formovie Theater Premium** (Android TV 11 / Google TV)
++* **Hisense Laser TVs & Projectors** (PX1-PRO, PX2-PRO, PL1, C1)
++* **AWOL Vision Triple-Laser Projectors** (LTV-2500, LTV-3000 Pro, LTV-3500 Pro)
++* **XGIMI Projectors** (Horizon Ultra, Horizon Pro, Aura 4K UST)
++* **BenQ 4K Projectors** (X3000i, X3100i, HT4550i via included Android TV QS01/QS02 dongle)
++
++---
++
+ ## Stereoscopic 3D Output Modes
+ 
+ Select your desired output mode during playback via the player OSD menu or permanently under `Settings` &rarr; `Video` &rarr; `3D MVC Output Mode`:
+@@ -106,6 +150,7 @@ Personalize your Android TV interface under `Settings` &rarr; `Interface` &rarr;
+ - **Cyber Blue:** High-tech cobalt blue theme.
+ - **Cinema Red:** Home-theater friendly dark red (reduces room ambient reflection).
+ - **Neon Purple:** Stylish synthwave violet.
++- **Monochrome Silver:** Elegant brushed titanium and platinum silver on dark obsidian slate.
+ 
+ ---
+ 
+@@ -122,7 +167,7 @@ Personalize your Android TV interface under `Settings` &rarr; `Interface` &rarr;
+ | **Blu-ray SUP/PGS Dynamic Resizing (60%–130%)**| **Yes** | No | No |
+ | **CIH 2.39:1 In-Frame Subtitle Clamping** | **Yes** | Yes | No |
+ | **3D Stereoscopic Floating Subtitle Parallax** | **Yes** | Partial | No |
+-| **Custom Theme Accent Colors** | **Yes (5 Themes)** | No | No |
++| **Custom Theme Accent Colors** | **Yes (6 Themes)** | No | No |
+ | **Network SMBv2 / SMBv3 NAS Streaming** | **Yes** | Yes | Yes |
+ 
+ ---
+@@ -143,8 +188,8 @@ No computer, USB thumb drive, or file manager needed!
+ 
+ ### Method 2: GitHub Releases (Direct APK)
+ 
+-1. Navigate to the [Releases](https://github.com/writesimplybcc/vlc4mvc/releases) page.
+-2. Under the latest `v1.0.0` release, download `VLC4MVC.apk` (approx. 88.6 MB).
++1. Navigate to the [Releases](https://github.com/writesimplybcc/VLC4MVC/releases) page.
++2. Under the latest release, download `VLC4MVC.apk` (approx. 88.6 MB).
+ 3. Sideload via `adb`:
+    ```bash
+    adb connect <SHIELD_IP>:5555
+@@ -200,8 +245,8 @@ To compile VLC4MVC from scratch:
+ ### Build Commands:
+ ```bash
+ # Clone the repository
+-git clone https://github.com/writesimplybcc/vlc4mvc.git
+-cd vlc4mvc
++git clone https://github.com/writesimplybcc/VLC4MVC.git
++cd VLC4MVC
+ 
+ # Initialize environment
+ export ANDROID_SDK=/path/to/android-sdk
+@@ -218,8 +263,15 @@ application/app/build/outputs/apk/dev/VLC-Android-3.7.2-all.apk
+ 
+ ---
+ 
+-## License & Acknowledgments
++## Authors & Acknowledgments
++
++* **Concept & Architecture:** Imagined by **writesimply.bcc**
++* **Engineering & Implementation:** Coded by **Gemini**
++* **Upstream Project:** [VLC for Android](https://code.videolan.org/videolan/vlc-android) by VideoLAN and VLC Authors.
++* Special thanks to the 3D home theater community, MakeMKV, and DLP 3D enthusiasts worldwide.
++
++---
++
++## License
+ 
+-- **License:** GNU General Public License v3 (GPL-3.0).
+-- **Upstream Project:** [VLC for Android](https://code.videolan.org/videolan/vlc-android) by VideoLAN.
+-- Special thanks to the open-source multimedia community, VideoLAN authors, and 3D home theater enthusiasts.
++VLC4MVC is free software licensed under the **GNU General Public License v3 (GPL-3.0)**.
+diff --git a/application/resources/src/main/res/values/arrays.xml b/application/resources/src/main/res/values/arrays.xml
+index 1a04a1ca5..a41d16034 100644
+--- a/application/resources/src/main/res/values/arrays.xml
++++ b/application/resources/src/main/res/values/arrays.xml
+@@ -772,6 +772,7 @@
+         <item>Cyber Blue</item>
+         <item>Cinema Red</item>
+         <item>Neon Purple</item>
++        <item>Monochrome Silver</item>
+     </string-array>
+ 
+     <string-array name="vlc4mvc_theme_color_values" translatable="false">
+@@ -780,5 +781,6 @@
+         <item>blue</item>
+         <item>red</item>
+         <item>purple</item>
++        <item>silver</item>
+     </string-array>
+ </resources>
+diff --git a/application/resources/src/main/res/values/strings.xml b/application/resources/src/main/res/values/strings.xml
+index 8ee637ab4..c689cf3aa 100644
+--- a/application/resources/src/main/res/values/strings.xml
++++ b/application/resources/src/main/res/values/strings.xml
+@@ -326,9 +326,13 @@
+     <string name="app_name_full">VLC4MVC for Android</string>
+     <string name="revision">Revision</string>
+     <string name="about">About</string>
+-    <string name="about_vlc_text">VLC for Android™ is a port of VLC media player, the popular open source media player. The Android™ version can read all files and network streams.</string>
++    <string name="about_vlc_text">3D MVC Blu-ray Edition for Nvidia Shield Pro &amp; 3D Projectors.
++
++Imagined by writesimply.bcc.
++Coded by Gemini.</string>
+     <string name="authors">Authors</string>
+-    <string name="about_copyright" translatable="false">Copyleft &#169; 1996&#8211;2026 by VideoLAN</string>
++    <string name="about_copyright" translatable="false">Copyleft &#169; 1996&#8211;2026 by VideoLAN and VLC Authors.
++VLC4MVC by writesimply.bcc &amp; Gemini.</string>
+     <string name="about_license" translatable="false">GNU General Public License v2.0</string>
+     <string name="about_license_text" translatable="false"></string>
+     <string name="vlc_authors">and VLC Authors.</string>
+diff --git a/application/television/src/main/java/org/videolan/television/ui/MainTvFragment.kt b/application/television/src/main/java/org/videolan/television/ui/MainTvFragment.kt
+index 82da430e4..f7c37ed5b 100644
+--- a/application/television/src/main/java/org/videolan/television/ui/MainTvFragment.kt
++++ b/application/television/src/main/java/org/videolan/television/ui/MainTvFragment.kt
+@@ -150,6 +150,7 @@ class MainTvFragment : BrowseSupportFragment(), OnItemViewSelectedListener, OnIt
+             "blue" -> android.graphics.Color.parseColor("#2196F3") to android.graphics.Color.parseColor("#1565C0")
+             "red" -> android.graphics.Color.parseColor("#E53935") to android.graphics.Color.parseColor("#C62828")
+             "purple" -> android.graphics.Color.parseColor("#9C27B0") to android.graphics.Color.parseColor("#6A1B9A")
++            "silver" -> android.graphics.Color.parseColor("#CFD8DC") to android.graphics.Color.parseColor("#37474F")
+             else -> android.graphics.Color.parseColor("#4CAF50") to android.graphics.Color.parseColor("#1B5E20")
+         }
+         //Enable search feature only if we detect Google Play Services.
+diff --git a/application/television/src/main/java/org/videolan/television/ui/browser/BaseTvActivity.kt b/application/television/src/main/java/org/videolan/television/ui/browser/BaseTvActivity.kt
+index fba0babfc..82e4b82bc 100644
+--- a/application/television/src/main/java/org/videolan/television/ui/browser/BaseTvActivity.kt
++++ b/application/television/src/main/java/org/videolan/television/ui/browser/BaseTvActivity.kt
+@@ -78,6 +78,7 @@ abstract class BaseTvActivity : FragmentActivity(), IDialogManager {
+             "blue" -> org.videolan.television.R.style.Theme_VLC_TV_Blue
+             "red" -> org.videolan.television.R.style.Theme_VLC_TV_Red
+             "purple" -> org.videolan.television.R.style.Theme_VLC_TV_Purple
++            "silver" -> org.videolan.television.R.style.Theme_VLC_TV_Silver
+             else -> org.videolan.television.R.style.Theme_VLC_TV_Green
+         }
+         setTheme(themeRes)
+diff --git a/application/vlc-android/res/values/styles.xml b/application/vlc-android/res/values/styles.xml
+index 0eb28bace..ee300db36 100644
+--- a/application/vlc-android/res/values/styles.xml
++++ b/application/vlc-android/res/values/styles.xml
+@@ -416,6 +416,13 @@
+         <item name="primary_focus">#339c27b0</item>
+     </style>
+ 
++    <style name="Theme.VLC.TV.Silver" parent="Theme.VLC.TV">
++        <item name="colorPrimary">#37474F</item>
++        <item name="colorAccent">#CFD8DC</item>
++        <item name="audio_browser_separator">#B0BEC5</item>
++        <item name="primary_focus">#33cfd8dc</item>
++    </style>
++
+     <!-- VLC4MVC Black Themes (Preferences & Mobile) -->
+     <style name="Theme.VLC.Black.Green" parent="Theme.VLC.Black">
+         <item name="colorPrimary">#4CAF50</item>
+@@ -447,6 +454,12 @@
+         <item name="colorControlHighlight">#9C27B0</item>
+     </style>
+ 
++    <style name="Theme.VLC.Black.Silver" parent="Theme.VLC.Black">
++        <item name="colorPrimary">#37474F</item>
++        <item name="colorAccent">#CFD8DC</item>
++        <item name="colorControlHighlight">#CFD8DC</item>
++    </style>
++
+     <style name="Theme.VLC.TV.Onboarding" parent="Theme.Leanback.Onboarding">
+         <item name="onboardingPageIndicatorStyle">@style/VLC.OnboardingPageIndicatorStyle</item>
+     </style>
+diff --git a/application/vlc-android/src/org/videolan/vlc/gui/helpers/UiTools.kt b/application/vlc-android/src/org/videolan/vlc/gui/helpers/UiTools.kt
+index acb1eff52..78131d831 100644
+--- a/application/vlc-android/src/org/videolan/vlc/gui/helpers/UiTools.kt
++++ b/application/vlc-android/src/org/videolan/vlc/gui/helpers/UiTools.kt
+@@ -1107,6 +1107,7 @@ fun BaseActivity.applyTheme() {
+             "blue" -> R.style.Theme_VLC_Black_Blue
+             "red" -> R.style.Theme_VLC_Black_Red
+             "purple" -> R.style.Theme_VLC_Black_Purple
++            "silver" -> R.style.Theme_VLC_Black_Silver
+             else -> R.style.Theme_VLC_Black_Green
+         }
+         setTheme(themeRes)
+-- 
+2.43.0
+
