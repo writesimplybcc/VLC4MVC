@@ -41,8 +41,8 @@ AFTVNews shortened code: 9716572
 
 - **Hardware-Accelerated Dual-Stream 3D MVC Decoding:**
   Plays unaltered 3D Blu-ray MKV rips made directly with [MakeMKV](https://www.makemkv.com/). No prior re-encoding to half-resolution SBS or TAB is required.
-- **7 Flexible Stereoscopic Output Modes:**
-  Outputs Full-SBS, Full-TAB, Half-SBS, Half-TAB, 4K Full-Fidelity Half-SBS/TAB, Frame Sequential (active shutter 120Hz), and Anaglyph 3D.
+- **8 Flexible Stereoscopic Output Modes:**
+  Outputs Full-SBS, Full-TAB, 4K Half-SBS/TAB (3840×2160), 1080p Half-SBS (TV & Mobile VR Headsets), 1080p Half-TAB (DLP 3D Projectors), 2D Base View, and Anaglyph Red/Cyan 3D (Standard 3D Glasses on any phone/screen).
 - **Dynamic Blu-ray (PGS / SUP) Subtitle Resizing:**
   Bitmap-based PGS subtitles on Blu-rays are notoriously oversized for large projection screens (100"–150"). VLC4MVC allows on-the-fly resizing from **60% to 130%** using bilinear resampling to preserve razor-sharp legibility.
 - **Constant Image Height (CIH) 2.39:1 Subtitle Clamping:**
@@ -111,17 +111,16 @@ VLC4MVC is built as a Universal Multi-Arch APK (`arm64-v8a`, `armeabi-v7a`, `x86
 
 Select your desired output mode during playback via the player OSD menu or permanently under `Settings` &rarr; `Video` &rarr; `3D MVC Output Mode`:
 
-| Mode | Target Resolution | Recommended Display / Use Case |
-| :--- | :--- | :--- |
-| **Monoscopic (2D)** | 1920×1080 | Standard 2D playback (Left eye stream only). |
-| **Full Side-by-Side (SBS)** | 3840×1080 | High-end 3D displays and VR headsets supporting full dual 1080p side-by-side. |
-| **Full Top-and-Bottom (TAB)** | 1920×2160 | Full dual 1080p vertical frame-packing. |
-| **Half Side-by-Side (HSBS 1080p)** | 1920×1080 | Standard anamorphic 3D TV / projector SBS mode (960×1080 per eye). |
-| **Half Top-and-Bottom (HTAB 1080p)** | 1920×1080 | Standard anamorphic 3D TV / projector TAB mode (1920×540 per eye). |
-| **Half SBS (4K Canvas)** | 3840×2160 | **Optimal for 4K 3D Projectors (NexiGo Aurora Pro):** Transmits both 1080p eyes side-by-side inside a native 4K frame without loss of horizontal resolution. |
-| **Half TAB (4K Canvas)** | 3840×2160 | **Optimal for 4K 3D Projectors:** Transmits both 1080p eyes stacked inside a native 4K frame without loss of vertical resolution. |
-| **Frame Sequential** | 1920×1080 @ 120Hz | 3D-Ready DLP Link displays and active shutter setups. |
-| **Red / Cyan Anaglyph** | 1920×1080 | Legacy red/cyan 3D glasses playback on any standard screen. |
+| Mode # | Mode Name | Target Resolution | Recommended Display / Use Case |
+| :---: | :--- | :--- | :--- |
+| **0** | **Full Side-by-Side (SBS)** | 3840×1080 | High-end dual-display processors and ultrawide VR setups. |
+| **1** | **Full Top-and-Bottom (TAB)** | 1920×2160 | Specialized frame-packed processors and custom display matrices. |
+| **2** | **Half-SBS (4K Canvas)** | 3840×2160 | **Optimal for 4K 3D Projectors:** Dual 1080p eyes placed side-by-side inside standard 3840×2160 frame. |
+| **3** | **Half-TAB (4K Canvas)** | 3840×2160 | **Optimal for 4K 3D Projectors (NexiGo Aurora Pro / Formovie):** Dual 1080p eyes stacked inside standard 3840×2160 frame. Zero AVR handshake issues. |
+| **4** | **Half-SBS (1080p)** | 1920×1080 | **Standard 3D TVs, Projectors & Mobile VR Headsets:** Splits 1080p frame down the middle for optical VR lenses (Google Cardboard, Destek, BoboVR). |
+| **5** | **Half-TAB (1080p)** | 1920×1080 | **Standard DLP 3D Projectors & 3D TVs:** The universal standard format for DLP-Link 3D glasses. |
+| **6** | **Monoscopic (2D)** | 1920×1080 | Standard 2D playback (Left eye stream only). |
+| **7** | **Anaglyph Red/Cyan 3D** | 1920×1080 | **Standard 3D Glasses on Any Screen:** Decodes MVC into Red (Left) and Cyan (Right) channels. Works on any phone, tablet, monitor, or TV with $2 glasses. |
 
 ---
 
@@ -273,6 +272,19 @@ The resulting package will be generated at:
 ```
 application/app/build/outputs/apk/dev/VLC-Android-3.7.2-all.apk
 ```
+
+---
+
+## Recent Enhancements & Optimizations
+
+* **2D Intro EGL Surface Lock:**  
+  Fixed a critical Android display renegotiation issue where movies beginning with 2D logos/intros (*Space Station 3D*) caused a 2.5-second surface tear and audio desync. Stereoscopic geometry is now locked from frame 0, and unpaired 2D intro frames are cleanly mirrored to both eyes.
+* **ARM NEON SIMD Blitter Acceleration:**  
+  Replaced high-resolution scalar byte loops with ARM vector instructions (`vzipq_u8` and `vuzp1q_u8`), processing up to 32 bytes per cycle and slashing CPU load on the Tegra X1+ processor.
+* **Smartphone & Mobile VR Headset Support:**  
+  Added in-playback touch controls via the mobile player bottom sheet, Mode 4 VR headset lens splitting, and Mode 7 Anaglyph Red/Cyan for zero-hardware 3D viewing.
+* **Direct AFTVNews Downloader Code:**  
+  Quick single-step sideload on Nvidia Shield and Android TV using shortcode **`9716572`**.
 
 ---
 
