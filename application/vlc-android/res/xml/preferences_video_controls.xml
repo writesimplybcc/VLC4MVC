@@ -183,4 +183,33 @@
     </PreferenceCategory>
 
 
+    <PreferenceCategory android:title="@string/vlc4mvc_prefs_category"
+            app:iconSpaceReserved="false">
+        <ListPreference
+                android:defaultValue="0"
+                android:entries="@array/vlc4mvc_output_modes"
+                android:entryValues="@array/vlc4mvc_output_mode_values"
+                android:key="vlc4mvc_output_mode"
+                android:summary="%s"
+                android:title="@string/vlc4mvc_output_mode_title"
+                app:iconSpaceReserved="false"
+                app:singleLineTitle="false" />
+        <CheckBoxPreference
+                android:defaultValue="false"
+                android:key="vlc4mvc_swap_eyes"
+                android:summary="@string/vlc4mvc_swap_eyes_summary"
+                android:title="@string/vlc4mvc_swap_eyes_title"
+                app:iconSpaceReserved="false"
+                app:singleLineTitle="false" />
+        <ListPreference
+                android:defaultValue="100"
+                android:entries="@array/vlc4mvc_sub_scale_entries"
+                android:entryValues="@array/vlc4mvc_sub_scale_values"
+                android:key="vlc4mvc_sub_scale"
+                android:summary="%s"
+                android:title="3D Subtitle Scale"
+                app:iconSpaceReserved="false"
+                app:singleLineTitle="false" />
+    </PreferenceCategory>
+
 </androidx.preference.PreferenceScreen>

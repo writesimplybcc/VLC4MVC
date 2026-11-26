@@ -96,6 +96,15 @@ If you prefer not to use an external HDMI box, VLC4MVC can be sideloaded directl
 * **XGIMI Projectors** (Horizon Ultra, Horizon Pro, Aura 4K UST)
 * **BenQ 4K Projectors** (X3000i, X3100i, HT4550i via included Android TV QS01/QS02 dongle)
 
+### Tier 5: Android Smartphones as Personal 3D Viewers
+VLC4MVC is built as a Universal Multi-Arch APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`) and installs directly on Android phones (Samsung Galaxy, Google Pixel, OnePlus, Xiaomi, etc.) for high-density personal 3D viewing:
+* **Mobile VR Headsets (Google Cardboard / Phone VR Holders):**  
+  Select **Mode 4 (Half-SBS 1080p)** or **Mode 0 (Full SBS)**. Clip the phone into any mobile VR headset (Destek V5, BoboVR, VR Shinecon, Google Cardboard) to enjoy full stereoscopic 3D through the optical lenses with true OLED blacks.
+* **Red / Cyan Anaglyph 3D Glasses:**  
+  Select **Mode 7 (Anaglyph Red/Cyan 3D)**. Decodes MVC directly into color-multiplexed Red (Left Eye) and Cyan (Right Eye) streams, allowing anyone to watch 3D movies on standard phone screens with classic $2 3D glasses.
+* **In-Playback Touch Controls:**  
+  During mobile playback, tap the screen &rarr; tap the player options icon &rarr; select **3D Output Format** to switch modes or invert left/right eyes directly under your thumb.
+
 ---
 
 ## Stereoscopic 3D Output Modes

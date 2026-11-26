@@ -1,0 +1,127 @@
+From 82d402b7277d3300caa4685987ff95f55dda1ba3 Mon Sep 17 00:00:00 2001
+From: writesimplybcc <writesimply.bcc@gmail.com>
+Date: Thu, 26 Nov 2026 12:47:56 +0800
+Subject: [PATCH] Add Mode 7 Anaglyph Red/Cyan stereoscopic 3D decoding
+
+---
+ modules/codec/vlc4mvc.c | 97 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 97 insertions(+)
+
+diff --git a/modules/codec/vlc4mvc.c b/modules/codec/vlc4mvc.c
+index b7b03fbdd5..d2361aa114 100644
+--- a/modules/codec/vlc4mvc.c
++++ b/modules/codec/vlc4mvc.c
+@@ -148,6 +148,13 @@ static void OutputFrames(decoder_t *p_dec)
+                     sar_den = 1;
+                     mv_mode = MULTIVIEW_STEREO_TB;
+                     break;
++                case 7: // Anaglyph Red/Cyan 3D (Standard 3D Glasses / Any Phone Screen)
++                    out_w = mvc_frame.width_Y;
++                    out_h = mvc_frame.height_Y;
++                    sar_num = 1;
++                    sar_den = 1;
++                    mv_mode = MULTIVIEW_2D;
++                    break;
+                 default:
+                     break;
+             }
+@@ -393,6 +400,96 @@ static void OutputFrames(decoder_t *p_dec)
+                     memcpy(dst + (h_half + y) * d_pitch, src_r + (y * 2) * s_stride, w);
+             }
+         }
++        else if (p_sys->i_output_mode == 7)
++        {
++            // Anaglyph Red/Cyan 3D (Left eye = Red, Right eye = Green+Blue)
++            int w = mvc_frame.width_Y;
++            int h = mvc_frame.height_Y;
++            int s_stride_y = mvc_frame.stride_Y;
++            int s_stride_c = mvc_frame.stride_C;
++            int d_pitch_y = p_pic->p[0].i_pitch;
++            int d_pitch_u = p_pic->p[1].i_pitch;
++            int d_pitch_v = p_pic->p[2].i_pitch;
++
++            uint8_t *dst_y = p_pic->p[0].p_pixels;
++            uint8_t *dst_u = p_pic->p[1].p_pixels;
++            uint8_t *dst_v = p_pic->p[2].p_pixels;
++
++            const uint8_t *src_yl = v_l->planes[0];
++            const uint8_t *src_yr = v_r->planes[0];
++            const uint8_t *src_ur = v_r->planes[1];
++            const uint8_t *src_vl = v_l->planes[2];
++            const uint8_t *src_vr = v_r->planes[2];
++
++            #define CLAMP255(v) ((v) < 0 ? 0 : ((v) > 255 ? 255 : (v)))
++
++            for (int y2 = 0; y2 < h / 2; y2++)
++            {
++                int y0 = y2 * 2;
++                int y1 = y0 + 1;
++
++                const uint8_t *s_yl0 = src_yl + y0 * s_stride_y;
++                const uint8_t *s_yl1 = src_yl + y1 * s_stride_y;
++                const uint8_t *s_yr0 = src_yr + y0 * s_stride_y;
++                const uint8_t *s_yr1 = src_yr + y1 * s_stride_y;
++
++                const uint8_t *s_ur = src_ur + y2 * s_stride_c;
++                const uint8_t *s_vl = src_vl + y2 * s_stride_c;
++                const uint8_t *s_vr = src_vr + y2 * s_stride_c;
++
++                uint8_t *d_y0 = dst_y + y0 * d_pitch_y;
++                uint8_t *d_y1 = dst_y + y1 * d_pitch_y;
++                uint8_t *d_u = dst_u + y2 * d_pitch_u;
++                uint8_t *d_v = dst_v + y2 * d_pitch_v;
++
++                for (int x2 = 0; x2 < w / 2; x2++)
++                {
++                    int dvL = (int)s_vl[x2] - 128;
++                    int duR = (int)s_ur[x2] - 128;
++                    int dvR = (int)s_vr[x2] - 128;
++
++                    int r_coeff = (1436 * dvL) >> 10;
++                    int g_coeff = (352 * duR + 731 * dvR) >> 10;
++                    int b_coeff = (1815 * duR) >> 10;
++
++                    int x0 = x2 * 2;
++                    int x1 = x0 + 1;
++
++                    // (y0, x0)
++                    int rl00 = CLAMP255((int)s_yl0[x0] + r_coeff);
++                    int gr00 = CLAMP255((int)s_yr0[x0] - g_coeff);
++                    int br00 = CLAMP255((int)s_yr0[x0] + b_coeff);
++                    d_y0[x0] = CLAMP255((306 * rl00 + 601 * gr00 + 117 * br00) >> 10);
++
++                    // (y0, x1)
++                    int rl01 = CLAMP255((int)s_yl0[x1] + r_coeff);
++                    int gr01 = CLAMP255((int)s_yr0[x1] - g_coeff);
++                    int br01 = CLAMP255((int)s_yr0[x1] + b_coeff);
++                    d_y0[x1] = CLAMP255((306 * rl01 + 601 * gr01 + 117 * br01) >> 10);
++
++                    // (y1, x0)
++                    int rl10 = CLAMP255((int)s_yl1[x0] + r_coeff);
++                    int gr10 = CLAMP255((int)s_yr1[x0] - g_coeff);
++                    int br10 = CLAMP255((int)s_yr1[x0] + b_coeff);
++                    d_y1[x0] = CLAMP255((306 * rl10 + 601 * gr10 + 117 * br10) >> 10);
++
++                    // (y1, x1)
++                    int rl11 = CLAMP255((int)s_yl1[x1] + r_coeff);
++                    int gr11 = CLAMP255((int)s_yr1[x1] - g_coeff);
++                    int br11 = CLAMP255((int)s_yr1[x1] + b_coeff);
++                    d_y1[x1] = CLAMP255((306 * rl11 + 601 * gr11 + 117 * br11) >> 10);
++
++                    // Average 2x2 RGB for chroma
++                    int r_avg = (rl00 + rl01 + rl10 + rl11) >> 2;
++                    int g_avg = (gr00 + gr01 + gr10 + gr11) >> 2;
++                    int b_avg = (br00 + br01 + br10 + br11) >> 2;
++
++                    d_u[x2] = CLAMP255(((-173 * r_avg - 339 * g_avg + 512 * b_avg) >> 10) + 128);
++                    d_v[x2] = CLAMP255(((512 * r_avg - 429 * g_avg - 83 * b_avg) >> 10) + 128);
++                }
++            }
++            #undef CLAMP255
++        }
+ 
+         decoder_QueueVideo(p_dec, p_pic);
+         edge264mvc_release_frame(p_sys->decoder, &mvc_frame);
+-- 
+2.43.0
+
